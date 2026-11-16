@@ -1,0 +1,16 @@
+# ONLY FOR AN EMPTY, USER-AUTHORIZED SAF TEST DIRECTORY.
+# Do not copy this fixture into a real Codex home.
+model = "before-switch-test-model"
+cwd = "/home/codex/workspace"
+cli_auth_credentials_store = "file"
+user_note = '''
+[model_providers.custom]
+This is literal user text, not a TOML section.
+'''
+
+[mcp_servers.test_preserve]
+command = "/not-a-real-mcp-test-command"
+args = ["--fixture"]
+
+[projects."/home/codex/workspace"]
+trust_level = "trusted"

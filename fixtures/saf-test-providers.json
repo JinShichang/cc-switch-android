@@ -1,0 +1,42 @@
+{
+  "schema": "cc-switch-android/v1",
+  "providers": [
+    {
+      "id": "saf-test-a",
+      "name": "SAF 测试 A",
+      "authKind": "apiKey",
+      "category": "custom",
+      "loginPolicy": "auto",
+      "settingsConfig": {
+        "auth": {
+          "OPENAI_API_KEY": "DUMMY_TEST_KEY_A_NEVER_VALID"
+        },
+        "config": "model_provider = \"custom\"\nmodel = \"test-model-a\"\nmodel_reasoning_effort = \"high\"\n[model_providers.custom]\nname = \"SAF A\"\nbase_url = \"https://a.example.invalid/v1\"\nwire_api = \"responses\"\n"
+      }
+    },
+    {
+      "id": "saf-test-b",
+      "name": "SAF 测试 B",
+      "authKind": "apiKey",
+      "category": "custom",
+      "loginPolicy": "auto",
+      "settingsConfig": {
+        "auth": {
+          "OPENAI_API_KEY": "DUMMY_TEST_KEY_B_NEVER_VALID"
+        },
+        "config": "model_provider = \"custom\"\nmodel = \"test-model-b\"\n[model_providers.custom]\nname = \"SAF B\"\nbase_url = \"https://b.example.invalid/v1\"\nwire_api = \"responses\"\n"
+      }
+    },
+    {
+      "id": "saf-test-official",
+      "name": "官方配置（保留已有登录）",
+      "authKind": "official",
+      "category": "official",
+      "loginPolicy": "auto",
+      "settingsConfig": {
+        "auth": {},
+        "config": ""
+      }
+    }
+  ]
+}

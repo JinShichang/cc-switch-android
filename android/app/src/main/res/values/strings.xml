@@ -1,0 +1,4 @@
+<resources>
+    <string name="webview_required">请更新 Android System WebView 后打开 CC Switch。此版本需要具备来源限制的消息接口。</string>
+    <string name="renderer_recovery">界面进程已停止。本地方案已保留；点击这里重新加载，并检查是否有未确认写入需要恢复。</string>
+</resources>

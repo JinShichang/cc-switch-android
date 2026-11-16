@@ -1,0 +1,47 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'app.ccswitch.android'
+    compileSdk 37
+    buildToolsVersion '36.0.0'
+    defaultConfig {
+        applicationId 'app.ccswitch.android'
+        minSdk 30
+        targetSdk 37
+        versionCode 1
+        versionName '0.1.0'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildFeatures { buildConfig true }
+    signingConfigs {
+        if (System.getenv('CCSWITCH_SIGNING_KEYSTORE')) {
+            local {
+                storeFile file(System.getenv('CCSWITCH_SIGNING_KEYSTORE'))
+                storePassword System.getenv('CCSWITCH_SIGNING_STORE_PASSWORD') ?: 'android'
+                keyAlias System.getenv('CCSWITCH_SIGNING_KEY_ALIAS') ?: 'androiddebugkey'
+                keyPassword System.getenv('CCSWITCH_SIGNING_KEY_PASSWORD') ?: 'android'
+            }
+        }
+    }
+    buildTypes {
+        debug { debuggable true }
+        release {
+            minifyEnabled false
+            if (System.getenv('CCSWITCH_SIGNING_KEYSTORE')) signingConfig signingConfigs.local
+        }
+    }
+    // The source contains no native libraries: the APK is architecture-neutral
+    // and runs natively on ARM64 through ART and the installed Android WebView.
+}
+
+dependencies { implementation 'androidx.webkit:webkit:1.17.1' }
+
+tasks.register('checkWebAssets') {
+    doLast {
+        if (!file('src/main/assets/web/index.html').isFile()) {
+            throw new GradleException('Missing frontend assets. Run npm ci and npm run build in the repository root first.')
+        }
+    }
+}
+tasks.named('preBuild') { dependsOn 'checkWebAssets' }
