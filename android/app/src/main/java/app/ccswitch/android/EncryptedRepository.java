@@ -27,8 +27,9 @@ final class EncryptedRepository {
     private final AtomicFile file;
     private JSONObject data;
 
-    EncryptedRepository(Context context) throws Exception {
-        file = new AtomicFile(new File(context.getNoBackupFilesDir(), "cc-switch.v1.enc"));
+    EncryptedRepository(Context context) throws Exception { this(context, "cc-switch.v1.enc"); }
+    EncryptedRepository(Context context, String filename) throws Exception {
+        file = new AtomicFile(new File(context.getNoBackupFilesDir(), filename));
         if (file.getBaseFile().exists() || new File(file.getBaseFile() + ".bak").exists()) {
             try (FileInputStream in = file.openRead()) {
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -49,15 +50,15 @@ final class EncryptedRepository {
         } else {
             data = new JSONObject().put("providers", new JSONArray()).put("backups", new JSONArray())
                 .put("journals", new JSONObject()).put("ownership", new JSONObject())
-                .put("settings", new JSONObject().put("zoom", 130).put("theme", "system"));
+                .put("settings", new JSONObject().put("zoom", 100).put("theme", "system"));
         }
     }
     void migrate() throws Exception {
         JSONObject next = copy();
         boolean changed = false;
-        if (data.optInt("schemaVersion", 1) < 2) {
-            next.getJSONObject("settings").put("zoom", 130);
-            next.put("schemaVersion", 2); changed = true;
+        if (data.optInt("schemaVersion", 1) < 3) {
+            next.getJSONObject("settings").put("zoom", 100);
+            next.put("schemaVersion", 3); changed = true;
         }
         for (String key : new String[] { "prompts", "documentBackups" }) if (!next.has(key)) { next.put(key, new JSONArray()); changed = true; }
         if (!next.has("documentJournals")) { next.put("documentJournals", new JSONObject()); changed = true; }

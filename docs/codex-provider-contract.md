@@ -1,6 +1,6 @@
 # 给 Codex Android 宿主的对接契约
 
-状态：2026-11-16，CC Switch Android 0.2.0 已实现 SAF 消费端。当前本地 Codex 源码已包含 CodexDocumentsProvider（com.ai.codex.documents），由原会话负责。本工程未修改 Codex 源码；尚未确认用户手机是否安装对应版本，也尚未完成实机联调。
+状态：2026-11-16，CC Switch Android 0.3.0 已实现 SAF 消费端。当前本地 Codex 源码已包含 CodexDocumentsProvider（com.ai.codex.documents），由原会话负责。本工程未修改 Codex 源码；尚未确认用户手机是否安装对应版本，也尚未完成实机联调。
 
 ## 暴露目录
 
@@ -32,11 +32,11 @@
 
 ## 文件范围
 
-0.2.0 读取 config.toml、auth.json、AGENTS.md、skills/**/SKILL.md、session_index.jsonl、sessions/**.jsonl、archived_sessions/**.jsonl。配置切换仅写 config.toml；用户在 MCP 页可显式修改选定 mcp_servers 项；提示词和用户技能页可写 AGENTS.md、skills/<一级用户目录>/SKILL.md。恢复可删除原本不存在的这些文件。不会修改 auth.json、钥匙串、会话日志、数据库或内置技能。
+当前版本读取 config.toml、auth.json、AGENTS.md、skills/**/SKILL.md、session_index.jsonl、sessions/**.jsonl、archived_sessions/**.jsonl。配置切换写 config.toml，配置了模型列表时创建内容寻址的 cc-switch-model-catalog-*.json；用户在 MCP 页可显式修改选定 mcp_servers 项；提示词和用户技能页可写 AGENTS.md、skills/<一级用户目录>/SKILL.md。恢复可删除原本不存在的这些文件。不会修改 auth.json、钥匙串、会话日志、数据库或内置技能。
 
 子目录按每级 DISPLAY_NAME 查到 DOCUMENT_ID 后访问；不拼接 content URI 或私有文件路径。新增技能需要创建 skills 和用户子目录，目录 MIME 使用 DocumentsContract.Document.MIME_TYPE_DIR；Markdown 使用 text/plain MIME 并保持完整名称。列表使用 SIZE、LAST_MODIFIED 排序。文档备份和配置备份各最多10份，未确认 journal 独立保留。
 
-会话目录扫描最多5000项、显示最多150份日志（使用已扫描集合按修改时间排序），用量扫描最近最多50份。每份日志最多读取32MB / 100000行；单行512KB，返回最多2000事件 / 2MB；达到限制会显示不完整。名称索引上限2MB。
+会话目录扫描最多5000项、显示最多1000份日志（使用已扫描集合按修改时间排序），用量扫描这些文件并缓存未修改文件。每份日志最多读取32MB / 100000行；单行512KB，返回最多2000事件 / 2MB；达到限制会显示不完整。名称索引上限2MB。
 
 配置投影拥有以下字段：
 
@@ -45,7 +45,7 @@
 - 方案显式提供时：`web_search`、`model_context_window`、`model_auto_compact_token_limit`、`model_supports_reasoning_summaries`、`model_verbosity`、指定的 agents/memories 模型字段。
 - 上游已废弃的 `disable_response_storage` 在应用时移除。
 
-切换供应商时 MCP、项目、信任、工作目录、认证存储模式、其他 provider、模型目录指针及不相关字段保持不变。可选字段有写入前值和所有权记录；切走时只恢复未被外部修改过的值。
+切换供应商时 MCP、项目、信任、工作目录、认证存储模式、其他 provider 及不相关字段保持不变；无自定义模型列表时保留非本应用管理的模型目录指针。可选字段有写入前值和所有权记录；切走时只恢复未被外部修改过的值。
 
 新 provider 统一写到 `[model_providers.custom]`，与当前上游一致。其他自定义表保留。当前 Codex 不接受的保留名称表会阻止应用并提示迁移，不被静默删除。
 
@@ -91,3 +91,11 @@ CC Switch 上游当前 `live/project/codex.rs` 明确使用 provider 表中的 `
 - 重启 Codex 后，实际新请求使用目标地址、Key、模型；记录与文件匹配测试分开。
 
 以上全部是待双方实机验证的要求，不是本次已经接通 Codex 的声明。
+
+## 0.3.0 补充（取代上文旧版数量与模型目录边界）
+
+- 会话目录最多显示扫描集合中的 1000 个日志，节点上限仍 5000。用量扫描这些文件并缓存未变化文件；不再仅最近 50 份。单文件读取边界保持不变，继承/不完整日志暂缓统计。
+- 生成 cc-switch-model-catalog-<内容指纹>.json，通过 SAF 创建并读回核验后写入 model_catalog_json 相对路径。宿主需按 config.toml 所在 .codex 目录解析相对路径，并允许此普通 JSON 文档。不同内容使用新文件，旧备份指针可继续引用；不清理用户自定义目录文件。
+- Android 原生 HTTP 中转仅监听 127.0.0.1:18181。guest 需能连接同一 loopback；这属于运行期联调要求，未实机验证。supports_websockets=false，须使用 HTTP Responses/SSE。
+- 开启过滤时，model_providers.custom.base_url 指向随机本机路由，experimental_bearer_token 为本机随机凭据；真正供应商密钥由 CC Switch 加密存储并在中转时注入。不得把该本机凭据误当远程 API Key。
+- 文件保存始终不等于运行中配置已生效。SAF 无法调用宿主重启、钥匙串或会话 SQLite 索引更新，仍需 Codex 端提供受授权接口。

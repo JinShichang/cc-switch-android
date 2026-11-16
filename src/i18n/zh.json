@@ -1511,7 +1511,7 @@
     "expandContent": "展开完整内容",
     "collapseContent": "收起",
     "helpTitle": "会话从哪里来",
-    "helpBody": "CC Switch 读取各个应用保存在本机的会话记录，位置见右上角 ⋯ 里的「会话记录在哪里」。Claude Desktop 没有单独的会话记录。",
+    "helpBody": "CC Switch 通过系统目录授权读取 Codex 会话记录。位置见右上角“会话记录在哪里”。",
     "moreActions": "会话的更多操作",
     "refreshList": "刷新列表",
     "listRefreshed": "已刷新会话列表",
@@ -1519,7 +1519,7 @@
     "preferredTerminal": "首选终端",
     "whereMenu": "会话记录在哪里",
     "whereTitle": "会话记录在哪里",
-    "whereLead": "CC Switch 从这些位置读取会话。Claude Desktop 没有单独的会话记录。",
+    "whereLead": "CC Switch 通过系统目录授权读取 Codex 会话记录。位置见右上角“会话记录在哪里”。",
     "whereNote": "在设置里改过配置目录的应用，按改过的目录读取。",
     "appPrefix": "应用：",
     "chooseApp": "选择应用",
@@ -1530,7 +1530,7 @@
     "groupBy": "分组方式",
     "groupByTime": "按时间",
     "groupByProject": "按项目",
-    "desktopNote": "Claude Desktop 没有单独的会话记录，这里显示 Claude Code 的会话。",
+    "desktopNote": "CC Switch 通过系统目录授权读取 Codex 会话记录。位置见右上角“会话记录在哪里”。",
     "dshMergedNote": "DeepSeek Harness 的 Web 和 Desktop 共用同一份会话记录，这里合并显示。",
     "matchCount": "匹配 {{count}} 个会话",
     "totalCount": "共 {{count}} 个会话",
@@ -2199,7 +2199,7 @@
   "codexConfig": {
     "authJson": "auth.json (JSON) *",
     "authJsonPlaceholder": "{\n  \"OPENAI_API_KEY\": \"sk-your-api-key-here\"\n}",
-    "authJsonHint": "Codex auth.json 配置内容",
+    "authJsonHint": "此方案的认证输入保存在 CC Switch 加密存储中；应用 API Key 时写入服务商 bearer token，不覆盖 Codex 的 auth.json 或钥匙串。",
     "authJsonStorageHint": "路由模式下显示的是存储的 auth 配置，不是实时的 auth.json",
     "configToml": "config.toml (TOML)",
     "configTomlHint": "Codex config.toml 配置内容",
@@ -2242,27 +2242,27 @@
     "subagentModelPlaceholder": "留空则跟随主模型",
     "subagentReasoningEffortLabel": "子代理推理强度",
     "subagentReasoningEffortDefault": "默认强度",
-    "subagentModelHint": "Codex 派出的子代理默认用的模型和推理强度。留空时沿用主代理的；只填模型时用该模型自己的默认强度。聚合模式下不生效，改用聚合页签「聚合设置」里的子代理模型。",
+    "subagentModelHint": "子代理默认使用的模型与推理强度。留空沿用主代理；只填模型时使用该模型默认强度。",
     "subagentModelNotInCatalog": "该模型不在模型列表中：Codex 拿不到它的上下文窗口；经路由转成 Chat / Anthropic 协议时会被换成默认模型。",
     "agentMaxThreadsLabel": "子代理并发上限",
-    "agentMaxThreadsHint": "一个 Codex 会话里最多同时开多少个子代理（不含主代理），切换供应商时保持不变。留空用 Codex 默认值（经典子 agent 工具 6 个，新版工具 3 个），最小为 1，不支持不限。新对话生效。",
+    "agentMaxThreadsHint": "一个 Codex 会话的子代理并发上限，不含主代理。最小为 1，留空不指定。Android 版将填写的值随方案应用，新会话生效。",
     "agentMaxThreadsPlaceholder": "留空则用 Codex 默认值",
     "agentMaxThreadsV2Override": "config.toml 的 [features.multi_agent_v2] 写了总数 {{total}}（含主代理），使用新版子 agent 工具时以它为准。",
     "autoReviewModelLabel": "自动审批模型",
-    "autoReviewModelHint": "Codex 开了自动审批（Approve for me）时，判断操作能不能放行用的模型。审批请求和主对话发给同一家，所以只能选这张卡模型列表里的。聚合模式下不生效，改用聚合页签「聚合设置」里的自动审批模型。改完需要重启 Codex。",
+    "autoReviewModelHint": "Codex 自动审批使用的模型，与主对话连接同一家供应商。只能选择本方案模型列表中的模型，修改后需完整重启 Codex。",
     "autoReviewModelCodexDefault": "Codex 默认（codex-auto-review）",
     "autoReviewModelMainDefault": "主模型自己审批（默认）",
     "autoReviewModelNoList": "这张卡没有模型列表：Codex 会用官方的 codex-auto-review 审批，只有部分转发 ChatGPT 账号的中转认它，不认就会报 404。在上面的模型列表里加上模型后就能选。",
     "officialSpeedTiersLabel": "保留官方 Fast 档",
-    "officialSpeedTiersHint": "让模型列表里的 GPT 模型保留官方的 Fast 速度档，Codex 选了 Fast 后请求会带 service_tier=priority。只有转发官方 ChatGPT 账号的中转（如 CPA）才认，会更快消耗额度；其他上游可能报错或按更高价计费。打开后，之前在官方卡下选过的 Fast 会立刻在这家生效。聚合模式下不生效。改完需要重启 Codex。",
+    "officialSpeedTiersHint": "保留已内置官方模板中的 Fast 档；目前仅内置 gpt-5.5 模板，其他模型不会虚构 Fast 能力。上游必须支持 service_tier=priority。",
     "modelListHint": "修改后需要重启 Codex。",
-    "modelListDefaultHelp": "这些模型会出现在 Codex 的 /model 里，第一行是默认模型。名字是官方 GPT 模型的行按官方条目生成，行里的显示名、窗口和思考等级不生效。",
+    "modelListDefaultHelp": "这些模型会出现在 Codex 的模型列表里，第一行是默认模型。可设置显示名、上下文窗口和思考等级；修改后需完整重启 Codex。",
     "addCatalogModel": "手动添加",
     "modelListTitle": "模型列表",
     "stackModelDefaultHelp": "这些模型会出现在 Codex 的 /model 里，选中后请求直达这家。第一行是默认模型：这家被设为默认时，Codex 默认用它。",
     "defaultModelNotInList": "默认模型 {{model}} 不在列表里：Codex 默认仍请求它，但 /model 里没有这一项。",
     "addToModelList": "加入列表",
-    "modelListEmpty": "未配置模型：聚合模式下只发布下面的默认模型。",
+    "modelListEmpty": "未配置额外模型列表，使用下面的默认模型。",
     "catalogDisplayNamePlaceholder": "例如: DeepSeek V4 Flash",
     "catalogModelPlaceholder": "例如: deepseek-v4-flash",
     "catalogColumnDisplay": "菜单显示名",
@@ -2280,12 +2280,12 @@
     "reasoningEffortToggle": "支持思考等级",
     "reasoningEffortHint": "上游支持 low/high/max 等思考深度时打开。会同时打开思考模式，并把 Codex 的 reasoning.effort 转成上游 Chat 参数。",
     "reasoningGroupTitle": "思考能力",
-    "keyFieldsHint": "地址、Key、模型、推理档位、上下文窗口和兼容开关随供应商切换；其余是 Codex 全局设置，保存后对所有供应商生效。",
+    "keyFieldsHint": "只应用服务商、模型及明确支持的相关参数。MCP、工作目录和其他用户自定义字段保留；此处的其他字段作为方案保存，不覆盖当前 Codex 设置。",
     "inactiveFieldsHint": "这些是旧版存进卡里的设置，现在切换不会写出去。点一下复制 TOML，需要时粘贴到上方。",
     "inactiveFieldCopied": "已复制",
     "upstreamFormatCopilotRouteHint": "所有模式都需要开启路由，由路由注入 Copilot 账号凭据；手动指定的协议模型不支持时会报错。",
     "maxOutputTokensWarning": "不要超过模型或网关的真实输出上限，否则会返回 400。",
-    "routeOnlySettingsHint": "以下两项只在路由、聚合模式下生效。"
+    "routeOnlySettingsHint": "以下两项只在启用本机中转时生效。"
   },
   "geminiConfig": {
     "envFile": "环境变量 (.env)",
@@ -2431,7 +2431,7 @@
   },
   "usage": {
     "title": "使用统计",
-    "subtitle": "查看 AI 模型的使用情况和成本统计",
+    "subtitle": "从已授权 .codex 目录读取 Codex 会话用量。价格为用户设置的估算价，不代表服务商实际账单。",
     "today": "24小时",
     "last7days": "7天",
     "last30days": "30天",
@@ -2510,11 +2510,11 @@
     "rebuildCodex": {
       "title": "Codex 用量维护",
       "description": "从本地 rollout 日志重新构建 Codex 会话用量",
-      "warning": "重建前会自动备份数据库。若源 JSONL 已删除，对应历史将无法重新导入。",
+      "warning": "从已授权日志重新计算当前统计缓存，不修改 Codex 原始日志。继承历史或不完整日志暂缓统计。",
       "action": "重建 Codex 用量",
       "confirmTitle": "确认重建 Codex 用量",
-      "confirmMessage": "此操作会清除现有 Codex 会话明细与汇总，再从本地 Codex 日志重新导入。\n\n已删除日志对应的历史将丢失；缺少父 rollout 的 fork 会暂缓导入。",
-      "confirmAction": "备份并重建",
+      "confirmMessage": "重新扫描已授权目录中的 Codex 日志并替换统计缓存。不会修改原始日志；已删除的日志将不再计入，无法确认基线的继承历史暂缓统计。",
+      "confirmAction": "重新扫描",
       "completed": "重建完成：导入 {{imported}} 条，错误 {{errors}}，疑似重复 {{suspected}}，暂缓文件 {{deferred}}",
       "failed": "Codex 用量重建失败：{{error}}",
       "actionEllipsis": "重建 Codex 用量"
@@ -2808,7 +2808,7 @@
     },
     "empty": {
       "title": "还没有用量数据",
-      "body": "会话日志和经路由服务的请求都会记在这里。",
+      "body": "通过“立即同步”读取已授权目录中的 Codex 日志。",
       "configurePricing": "配置模型定价"
     },
     "pricing": {
@@ -5433,5 +5433,8 @@
     "later": "稍后",
     "installNow": "安装并重启",
     "installFailed": "安装更新失败"
+  },
+  "android": {
+    "codexDeleteHint": "删除会话需要同步 Codex 数据库索引，请在 Codex 内删除。"
   }
 }

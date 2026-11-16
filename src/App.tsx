@@ -53,6 +53,15 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import PromptListItem from "./components/prompts/PromptListItem";
+import { useQueryClient } from "@tanstack/react-query";
+import { resetAndroidData } from "./android/commands";
+import { DataStatus } from "./android/DataStatus";
+import { SessionManagerPage } from "./vendor/components/sessions/SessionManagerPage";
+import { UsagePage } from "./vendor/components/usage/UsagePage";
+import {
+  prepareFilteredProvider,
+  FilterStatusPanel,
+} from "./android/FilterControl";
 import { ProviderEditor, Modal } from "./ProviderEditor";
 import { invoke, isNative } from "./bridge";
 import {
@@ -96,7 +105,7 @@ const EMPTY: AppState = {
   pendingDocuments: [],
   directory: null,
   pendingRecovery: false,
-  settings: { zoom: 130, theme: "system" },
+  settings: { zoom: 100, theme: "system" },
   native: isNative,
 };
 const message = (error: unknown) =>
@@ -214,6 +223,7 @@ function More({
 }
 
 export function App() {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<AppState>(EMPTY);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [view, setView] = useState<View>("providers");
@@ -242,7 +252,7 @@ export function App() {
   const [usageErrors, setUsageErrors] = useState(0),
     [usageLimit, setUsageLimit] = useState(false);
   const [picker, setPicker] = useState<PickerStatus | null>(null),
-    [zoomInput, setZoomInput] = useState("130");
+    [zoomInput, setZoomInput] = useState("100");
   const [keysIncluded, setKeysIncluded] = useState(false),
     [providerTab, setProviderTab] = useState<"list" | "current">("list");
   const [skillsMeta, setSkillsMeta] = useState<
@@ -330,6 +340,11 @@ export function App() {
       window.removeEventListener("resize", size);
     };
   }, [state.settings]);
+  useEffect(() => {
+    resetAndroidData();
+    queryClient.removeQueries({ queryKey: ["sessions"] });
+    queryClient.removeQueries({ queryKey: ["usage"] });
+  }, [state.directory?.uri, queryClient]);
   const navigate = (next: View) => {
     if (busyRef.current) return;
     setView(next);
@@ -339,8 +354,7 @@ export function App() {
     setError("");
   };
   useEffect(() => {
-    if (!state.directory || !["prompts", "skills", "sessions"].includes(view))
-      return;
+    if (!state.directory || !["prompts", "skills"].includes(view)) return;
     let alive = true;
     setCatalog(null);
     (async () => {
@@ -365,6 +379,12 @@ export function App() {
   useEffect(() => {
     window.__ccswitchBack = () => {
       if (busyRef.current) return true;
+      if (document.querySelector("[role=dialog][data-state=open]")) {
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
+        return true;
+      }
       if (dialog) {
         setDialog(null);
         return true;
@@ -426,21 +446,33 @@ export function App() {
   const applyProvider = (provider: Provider) =>
     action("正在备份、写入并读回核对…", async () => {
       if (!snapshot) throw new Error("请先授权目录并读取配置。");
-      const plan = planApply(snapshot, provider);
+      planApply(snapshot, provider);
+      const routed = await prepareFilteredProvider(provider);
+      const plan = planApply(snapshot, routed);
       const result = await invoke<{ state: AppState; snapshot: Snapshot }>(
         "apply",
         {
           providerId: provider.id,
           config: plan.config,
+          catalog: plan.catalog,
           ownership: plan.ownership,
           expectedRevision: snapshot.revision,
         },
       );
+      let stopWarning = "";
+      if (!provider.historyFilter) {
+        try {
+          await invoke("stopFilter");
+        } catch {
+          stopWarning = "配置已恢复直连，但停止中转服务失败，请检查运行状态。";
+        }
+      }
       setState(result.state);
       setSnapshot(result.snapshot);
       setNotice(
         "文件保存成功并已读回核对。请完全重启 Codex，在新会话确认服务商与模型。" +
-          plan.warnings.join(" "),
+          plan.warnings.join(" ") +
+          stopWarning,
       );
     });
   const previewProvider = (provider: Provider) => {
@@ -784,16 +816,6 @@ export function App() {
         onClick={importSkill}
       >
         <Plus size={18} />
-      </Button>
-    ) : view === "usage" ? (
-      <Button
-        variant="neutral"
-        size="compact"
-        disabled={!state.directory || busy}
-        onClick={scanUsage}
-      >
-        <RefreshCw size={15} />
-        扫描
       </Button>
     ) : null;
 
@@ -1524,141 +1546,11 @@ export function App() {
             </>
           )}
           {view === "sessions" && (
-            <>
-              {!state.directory ? (
-                grant
-              ) : session ? (
-                <>
-                  <Button variant="quiet" onClick={() => setSession(null)}>
-                    <ArrowLeft size={15} />
-                    返回会话
-                  </Button>
-                  <Panel
-                    title={sessionNames[session.parsed.id] || session.parsed.id}
-                  >
-                    <p className="muted break-word">
-                      {session.parsed.cwd} ·{" "}
-                      {session.parsed.model || "未记录模型"}
-                    </p>
-                    <small className="muted">{session.file.path}</small>
-                  </Panel>
-                  {session.parsed.partial && (
-                    <p className="inline-warning">
-                      此日志超过读取限制或存在未完成 /
-                      损坏的行，只展示已读部分。
-                    </p>
-                  )}
-                  {session.parsed.messages.length ? (
-                    session.parsed.messages.map((item, i) => (
-                      <article key={i} className={"message-row " + item.role}>
-                        <span>{item.role === "user" ? "你" : "Codex"}</span>
-                        <pre>{item.text}</pre>
-                      </article>
-                    ))
-                  ) : (
-                    <Empty
-                      icon={<History size={28} />}
-                      title="没有可展示的对话正文"
-                    >
-                      日志可能仅含工具事件或被截断。
-                    </Empty>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className="page-toolbar">
-                    <span className="muted">Codex · 最近会话（只读）</span>
-                    <Button
-                      variant="quiet"
-                      size="icon"
-                      aria-label="刷新会话"
-                      onClick={() =>
-                        action("读取会话目录…", async () =>
-                          setCatalog(
-                            await invoke("catalog", { kind: "sessions" }),
-                          ),
-                        )
-                      }
-                    >
-                      <RefreshCw size={16} />
-                    </Button>
-                  </div>
-                  {catalog?.truncated && (
-                    <p className="inline-warning">
-                      最多显示最近 {catalog.limit}{" "}
-                      个日志；目录较大时结果可能不完整。
-                    </p>
-                  )}
-                  {catalog?.indexTruncated && (
-                    <p className="muted">名称索引过大，改用文件名显示。</p>
-                  )}
-                  <div className="search">
-                    <Search size={16} />
-                    <input
-                      aria-label="搜索会话"
-                      placeholder="搜索会话名称或路径…"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                    />
-                  </div>
-                  {catalog?.files.length ? (
-                    <div className="list-panel">
-                      {catalog.files
-                        .filter((file) =>
-                          (
-                            file.name +
-                            " " +
-                            sessionNames[
-                              file.name.match(
-                                /[0-9a-f]{8}-[0-9a-f-]{27,}/i,
-                              )?.[0] ?? ""
-                            ]
-                          )
-                            .toLowerCase()
-                            .includes(query.toLowerCase()),
-                        )
-                        .map((file) => {
-                          const id =
-                            file.name.match(
-                              /[0-9a-f]{8}-[0-9a-f-]{27,}/i,
-                            )?.[0] ?? "";
-                          return (
-                            <button
-                              key={file.path}
-                              className="list-row w-full text-start"
-                              onClick={() => openSession(file)}
-                            >
-                              <History size={19} />
-                              <div className="grow min-w-0">
-                                <strong className="truncate block">
-                                  {sessionNames[id] ||
-                                    file.name
-                                      .replace(/^rollout-/, "")
-                                      .replace(/\.jsonl$/, "")}
-                                </strong>
-                                <p className="muted">
-                                  {date(file.modified)}
-                                  {file.path.startsWith("archived")
-                                    ? " · 已归档"
-                                    : ""}
-                                </p>
-                              </div>
-                              <ChevronRight size={16} />
-                            </button>
-                          );
-                        })}
-                    </div>
-                  ) : (
-                    <Empty
-                      icon={<History size={28} />}
-                      title={catalog ? "没有会话日志" : "正在读取会话…"}
-                    >
-                      读取 sessions 与 archived_sessions 目录中的 JSONL 文件。
-                    </Empty>
-                  )}
-                </>
-              )}
-            </>
+            <div className="mobile-upstream-page">
+              {!state.directory && grant}
+              <DataStatus />
+              <SessionManagerPage appId="codex" />
+            </div>
           )}
           {view === "auth" && (
             <>
@@ -1744,121 +1636,21 @@ export function App() {
             </>
           )}
           {view === "usage" && (
-            <>
-              {!state.directory ? (
-                grant
-              ) : (
-                <>
-                  <p className="page-note">
-                    扫描最近最多 50 个会话。以下为日志 Token
-                    快照，不是服务商账单、余额或完整请求数。
-                  </p>
-                  {!usageScanned ? (
-                    <Empty
-                      icon={<ChartColumn size={28} />}
-                      title="读取 Codex 用量"
-                      action={
-                        <Button
-                          variant="neutral"
-                          onClick={scanUsage}
-                          disabled={busy}
-                        >
-                          扫描日志
-                        </Button>
-                      }
-                    >
-                      按会话 ID 去重；派生会话含历史副本时从合计排除。
-                    </Empty>
-                  ) : (
-                    <>
-                      <div className="metrics">
-                        <div>
-                          <span>输入 Tokens</span>
-                          <strong>{number(totals.usage.input)}</strong>
-                        </div>
-                        <div>
-                          <span>输出 Tokens</span>
-                          <strong>{number(totals.usage.output)}</strong>
-                        </div>
-                        <div>
-                          <span>缓存输入</span>
-                          <strong>{number(totals.usage.cached)}</strong>
-                        </div>
-                        <div>
-                          <span>总 Tokens</span>
-                          <strong>{number(totals.usage.total)}</strong>
-                        </div>
-                      </div>
-                      <p className="muted">
-                        计入 {totals.counted} 个会话；排除{" "}
-                        {totals.excludedForks} 个派生会话。
-                        {usageErrors > 0
-                          ? " " + usageErrors + " 个日志读取失败。"
-                          : ""}
-                      </p>
-                      {usageLimit && (
-                        <p className="inline-warning">
-                          达到扫描上限或存在不完整日志，统计仅代表已读取部分。
-                        </p>
-                      )}
-                      <div className="list-panel">
-                        {usageRows.map((row, i) => (
-                          <div className="list-row" key={i}>
-                            <div className="min-w-0 grow">
-                              <strong className="truncate block">
-                                {row.model || row.id}
-                              </strong>
-                              <p className="muted">
-                                {row.usageSource}
-                                {row.forked ? " · 派生（未计入）" : ""}
-                              </p>
-                            </div>
-                            <span className="tabular-nums">
-                              {number(row.usage.total)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </>
-          )}
-          {view === "apps" && (
-            <Panel title="Codex">
-              <div className="list-row">
-                <AppGlyph size={26} />
-                <div className="grow">
-                  <strong>Codex Android</strong>
-                  <p className="muted">
-                    {picker?.codexProviderInstalled
-                      ? "检测到文档提供方"
-                      : "未检测到文档提供方"}
-                  </p>
-                </div>
-                <Button
-                  variant="neutral"
-                  onClick={() =>
-                    action("打开 Codex…", async () => {
-                      await invoke("openCodex");
-                    })
-                  }
-                >
-                  打开
-                </Button>
-              </div>
-              <p className="muted">
-                CC Switch 独立运行，通过系统授权目录管理 Codex 配置。
-              </p>
-            </Panel>
+            <div className="mobile-upstream-page">
+              {!state.directory && grant}
+              <DataStatus usage />
+              <UsagePage
+                initialAppType="codex"
+                onOpenRoutingSettings={() => setView("settings")}
+              />
+            </div>
           )}
           {view === "settings" && (
             <>
               {section === "general" && (
                 <>
                   <Panel title="界面缩放">
-                    <p className="muted">默认 130%，左右按钮每次调整 10%。</p>
+                    <p className="muted">默认 100%，左右按钮每次调整 10%。</p>
                     <div className="zoom-control">
                       <Button
                         variant="neutral"
@@ -1902,12 +1694,13 @@ export function App() {
                     </div>
                     <Button
                       variant="quiet"
-                      onClick={() => setZoom(130)}
+                      onClick={() => setZoom(100)}
                       disabled={busy}
                     >
-                      恢复 130%
+                      恢复 100%
                     </Button>
                   </Panel>
+                  <FilterStatusPanel />
                   <Panel title="外观">
                     <SegmentedControl
                       aria-label="外观"
@@ -2120,7 +1913,7 @@ export function App() {
                     <img src={logo} width={42} height={42} alt="CC Switch" />
                     <div>
                       <strong>CC Switch</strong>
-                      <p className="muted">0.2.0 · Android · Codex</p>
+                      <p className="muted">0.3.0 · Android · Codex</p>
                     </div>
                   </div>
                   <p className="muted">

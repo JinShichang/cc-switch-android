@@ -24,7 +24,10 @@ function visit(name, from = root) {
 }
 const manifest = JSON.parse(read('package.json'));
 for (const name of Object.keys(manifest.dependencies)) visit(name);
-const sections = ['CC Switch Android — third-party notices\n\nUpstream CC Switch 4.0.33, commit fc3eb797c72e054d554eea6a2e7a8b93933c6ac5.\nCopied/adapted: Sidebar, AppPageHeader, UI controls, PromptListItem, Chinese locale, stylesheet, icons, Codex template and text normalization. Codex configuration projection semantics ported from Rust.\n\n' + read('LICENSE'), ...packages.values()];
+const sections = ['CC Switch Android — third-party notices\n\nUpstream CC Switch 4.0.33, commit fc3eb797c72e054d554eea6a2e7a8b93933c6ac5.\nCopied/adapted: complete Codex custom form components, model catalog templates, session manager and transcript reader, usage dashboard/charts/tables/pricing, Sidebar, AppPageHeader, UI controls, PromptListItem, Chinese locale, stylesheet, icons, Codex template and text normalization. Codex configuration projection semantics ported from Rust.\n\n' + read('LICENSE'), ...packages.values()];
 sections.push('AndroidX libraries (including WebKit), Kotlin standard library, JetBrains annotations and JSpecify\nCopyright their respective authors, Android Open Source Project contributors, JetBrains and JSpecify contributors.\nDistributed under Apache License 2.0. Resolved versions: see docs/android-dependencies.txt.\n\n' + read('licenses/Apache-2.0.txt'));
+sections.push('Brotli Java decoder 0.1.2 — MIT\n\n' + read('licenses/brotli-MIT.txt'));
+sections.push('zstd-jni 1.5.7-28 — BSD-2-Clause; bundled Zstandard — BSD-3-Clause (BSD license option selected)\n\n' + read('licenses/zstd-jni-BSD-2.txt') + '\n\n' + read('licenses/zstd-BSD-3.txt'));
+sections.push('History filter behavior references the user-provided agentrouter/ccswitch-codex-filter v2. Android implementation is independently written; no license was supplied with the reference directory and its source is not redistributed.');
 writeFileSync(join(root, 'THIRD_PARTY_NOTICES.txt'), sections.join('\n\n' + '='.repeat(72) + '\n\n'), 'utf8');
 console.log('Included licenses for ' + packages.size + ' runtime dependencies.');

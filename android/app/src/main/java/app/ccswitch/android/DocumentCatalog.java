@@ -24,7 +24,7 @@ final class DocumentCatalog {
             walk("archived_sessions", 0, 6, false, files);
         } else throw new AppFailure("invalid_catalog", "不支持此文档列表。");
         files.sort(Comparator.<JSONObject>comparingLong(item -> item.optLong("modified")).reversed().thenComparing(item -> item.optString("path")));
-        int maximum = kind.equals("skills") ? 200 : 150;
+        int maximum = kind.equals("skills") ? 200 : 1000;
         if (files.size() > maximum) truncated = true;
         JSONArray output = new JSONArray();
         for (int i = 0; i < Math.min(files.size(), maximum); i++) output.put(files.get(i));
@@ -104,7 +104,10 @@ final class DocumentCatalog {
         if (payload == null) return null;
         JSONObject result = new JSONObject().put("type", type).put("timestamp", event.opt("timestamp"));
         JSONObject output = new JSONObject();
-        if (type.equals("session_meta")) copy(payload, output, "id", "cwd", "timestamp", "forked_from_id", "source");
+        if (type.equals("session_meta")) copy(payload, output, "id", "cwd", "timestamp", "forked_from_id", "parent_thread_id", "history_base_thread_id", "model_provider", "source");
+        else if (!usageOnly && type.equals("response_item")) { output=new JSONObject(payload.toString());if(output.has("encrypted_content")){output.remove("encrypted_content");output.put("redacted",true);} }
+        else if (!usageOnly && type.equals("event_msg") && java.util.Set.of("turn_aborted","context_compacted","error").contains(payload.optString("type"))) copy(payload,output,"type","message");
+        else if (type.equals("event_msg") && payload.optString("type").equals("thread_settings_applied")) copy(payload, output, "type", "thread_settings");
         else if (type.equals("turn_context")) copy(payload, output, "turn_id", "model");
         else if (type.equals("token_usage_record")) copy(payload, output, "turn_id", "response_id", "turn_token_usage", "token_usage", "usage");
         else if (type.equals("event_msg") && payload.optString("type").equals("token_count")) copy(payload, output, "type", "info");

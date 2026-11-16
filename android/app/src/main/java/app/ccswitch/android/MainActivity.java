@@ -48,6 +48,7 @@ public final class MainActivity extends Activity {
     private SharedPreferences preferences;
     private EncryptedRepository repository;
     private Call pickerCall;
+    private Call notificationCall;
     private String exportText;
     private String exportName = "cc-switch-codex.json", exportMime = "application/json";
     private boolean destroyed;
@@ -147,6 +148,31 @@ public final class MainActivity extends Activity {
             if (repository == null) { EncryptedRepository candidate = new EncryptedRepository(this); candidate.migrate(); repository = candidate; }
             Object result;
             switch (method) {
+                case "fetchModels": result=NetworkTools.models(args);break;
+                case "testEndpoints": result=NetworkTools.endpoints(args);break;
+                case "modelsDev": result=NetworkTools.get("https://models.dev/api.json",null,null,12*1024*1024);break;
+                case "exchangeRates": result=NetworkTools.exchangeRates();break;
+                case "backgroundStatus":
+                    result = new JSONObject().put("unrestricted",getSystemService(android.os.PowerManager.class).isIgnoringBatteryOptimizations(getPackageName())).put("notifications",getSystemService(android.app.NotificationManager.class).areNotificationsEnabled()); break;
+                case "requestNotifications":
+                    runOnUiThread(()->{
+                        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
+                            if(notificationCall!=null){failure(call,new AppFailure("permission_busy","请先完成当前通知权限提示。"));return;}
+                            notificationCall=call;requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},55);
+                        }else success(call,true);
+                    });return;
+                case "openBatterySettings":
+                    runOnUiThread(()->{try{startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));}catch(Exception e){startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}});result=true;break;
+                case "prepareFilter": result=FilterService.prepare(this,args);break;
+                case "filterStatus": result=FilterService.status();break;
+                case "startFilter": FilterService.start(this);result=FilterService.status();break;
+                case "stopFilter": FilterService.stop(this);result=FilterService.status();break;
+                case "clearFilterRoutes":
+                    byte[] currentBytes=tree().read();String current=currentBytes==null?"":TreeAccess.utf8(currentBytes);
+                    if(current.contains("127.0.0.1:"+FilterServer.PORT+"/r/"))throw new AppFailure("filter_still_applied","当前配置仍使用本机过滤地址，请先应用直连方案。");
+                    FilterService.clear(this);result=true;break;
+                case "readUiData": result=repository.copy().optJSONObject("uiData");if(result==null)result=new JSONObject();break;
+                case "writeUiData": JSONObject ui=repository.copy();ui.put("uiData",args);repository.replace(ui);result=args;break;
                 case "bootstrap": result = state(); break;
                 case "readCurrent": result = snapshot(tree()); break;
                 case "providerStatus": result = DocumentPicker.status(this); break;
@@ -244,7 +270,8 @@ public final class MainActivity extends Activity {
         return new JSONObject().put("config", config == null ? JSONObject.NULL : TreeAccess.utf8(config))
             .put("auth", auth == null ? JSONObject.NULL : TreeAccess.utf8(auth))
             .put("revision", TransactionEngine.revision(config, auth)).put("directory", access.info())
-            .put("ownership", ownership == null ? JSONObject.NULL : ownership.opt(access.tree.toString()));
+            .put("ownership", ownership == null ? JSONObject.NULL : ownership.opt(access.tree.toString()))
+            .put("filteredRoutes",FilterService.routes(this));
     }
     private JSONObject state() throws Exception {
         JSONObject data = repository.copy();
@@ -297,6 +324,8 @@ public final class MainActivity extends Activity {
         JSONObject selected = null;
         for (int i = 0; i < providers.length(); i++) if (providers.getJSONObject(i).getString("id").equals(providerId)) selected = providers.getJSONObject(i);
         if (selected == null) throw new AppFailure("missing_profile", "方案已被删除，请刷新后重试。");
+        JSONObject catalog=args.optJSONObject("catalog");
+        if(catalog!=null){String name=catalog.getString("name");if(!name.matches("cc-switch-model-catalog-[a-f0-9]{1,16}\\.json"))throw new AppFailure("invalid_catalog","模型目录文件名无效。");byte[] contents=catalog.getString("text").getBytes(StandardCharsets.UTF_8);new JSONObject(catalog.getString("text")).getJSONArray("models");TransactionEngine.Port port=access.port(name);byte[] prior=port.read();if(prior!=null&&!Arrays.equals(prior,contents))throw new AppFailure("catalog_conflict","模型目录已被外部修改，本次未覆盖。");if(prior==null)port.write(contents);if(!Arrays.equals(contents,port.read()))throw new AppFailure("catalog_write_failed","模型目录写入后核验失败，未修改配置。");}
         writeConfig(access, config.getBytes(StandardCharsets.UTF_8), args.getString("expectedRevision"),
             args.getJSONObject("ownership"), providerId, "应用 · " + selected.getString("name"));
         return new JSONObject().put("state", state()).put("snapshot", snapshot(access)).put("fileVerified", true).put("runtimeConfirmed", false);
@@ -448,6 +477,11 @@ public final class MainActivity extends Activity {
         });
     }
 
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){
+        super.onRequestPermissionsResult(request,permissions,results);
+        if(request==55&&notificationCall!=null){Call call=notificationCall;notificationCall=null;success(call,results.length>0&&results[0]==android.content.pm.PackageManager.PERMISSION_GRANTED);}
+    }
+    @Override protected void onResume(){super.onResume();if(web!=null)web.evaluateJavascript("window.dispatchEvent(new Event('ccswitch-resume'))",null);}
     private void success(Call call, Object value) {
         try { respond(call, new JSONObject().put("id", call.id).put("ok", true).put("result", value)); } catch (Exception ignored) { }
     }

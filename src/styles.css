@@ -757,3 +757,81 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Full upstream pages: only responsive placement, scrolling and touch sizing. */
+.mobile-upstream-page {
+  min-width: 0;
+  width: 100%;
+  height: calc(var(--app-height, 100dvh) - 100px);
+  display: flex;
+  flex-direction: column;
+}
+.mobile-upstream-page > :last-child {
+  min-height: 0;
+  flex: 1;
+}
+.mobile-provider {
+  min-width: 0;
+  overflow-x: hidden;
+}
+.mobile-provider input,
+.mobile-provider textarea {
+  min-width: 0;
+}
+.filter-status {
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .mobile-provider .grid-cols-2,
+  .mobile-provider .grid-cols-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mobile-provider [class*="grid-cols-["] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 8px;
+  }
+  .mobile-provider .flex.items-center.justify-between {
+    flex-wrap: wrap;
+  }
+  .mobile-provider input,
+  .mobile-provider button[role="combobox"] {
+    min-height: 38px;
+  }
+  .mobile-provider button[aria-label*="拖"] {
+    min-width: 24px;
+    min-height: 40px;
+    touch-action: none;
+  }
+  .mobile-provider .cm-editor {
+    max-width: 100%;
+  }
+  .mobile-upstream-page header {
+    padding-left: 8px;
+    padding-right: 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 48px;
+  }
+  .mobile-upstream-page [class*="px-6"] {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .mobile-upstream-page [class~="min-w-[240px]"] {
+    min-width: 0;
+  }
+  [role="dialog"] {
+    max-width: calc(100vw - 20px);
+    max-height: calc(var(--app-height, 100dvh) - 20px);
+    overflow: auto;
+  }
+}
+
+@media(max-width:640px){
+ .mobile-upstream-page [role="region"][aria-label="会话列表"] {margin-left:8px;margin-right:8px;}
+ .mobile-upstream-page h1 {max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+ .mobile-upstream-page .group .absolute.opacity-0 {opacity:1;}
+ .mobile-upstream-page .group .pointer-events-none.absolute.end-0 {display:none;}
+}

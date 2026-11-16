@@ -9,7 +9,7 @@ cd C:\AI-Projects\codex-android\cc-switch-android
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build.ps1 -Offline
 ```
 
-脚本会增量运行配置测试、Java 事务测试、TypeScript 编译、Vite 打包及 `:app:assembleRelease`，随后验证 APK 签名并写出 SHA-256。不会清理构建缓存。
+脚本会增量运行配置测试、Java 事务测试、TypeScript 编译、Vite 打包、Android 过滤单元测试及 `:app:assembleRelease :app:lintRelease`，随后验证 APK 签名并写出 SHA-256。不会清理构建缓存。
 
 | 项目 | 已验证版本/位置 |
 | --- | --- |
@@ -56,4 +56,4 @@ npm run preview -- --port 4179
 
 ## APK 内容
 
-应用包名 `app.ccswitch.android`。不声明互联网、外部存储、全盘访问或 Root 权限。只加载内置 WebView 资源，通过有来源和主框架限制的 WebMessage 接口访问原生功能。没有 PRoot、Debian、Rust runtime 或额外 native `.so`。
+应用包名 `app.ccswitch.android`。声明 INTERNET、前台服务 specialUse、通知和 WAKE_LOCK，用于用户启用的本机中转；无外部存储、全盘访问或 Root 权限。只加载内置 WebView 资源，通过有来源和主框架限制的 WebMessage 接口访问原生功能。没有 PRoot、Debian 或 Rust runtime。zstd-jni 官方 Android AAR 带 ARM64 解压 .so，APK 仅打包 arm64-v8a；其他界面/SAF 部分使用 ART 与 WebView。

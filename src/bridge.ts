@@ -40,7 +40,7 @@ let preview: AppState = {
   pendingDocuments: [],
   directory: null,
   pendingRecovery: false,
-  settings: { zoom: 130, theme: "system" },
+  settings: { zoom: 100, theme: "system" },
   native: false,
 };
 

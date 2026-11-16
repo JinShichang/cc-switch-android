@@ -53,7 +53,8 @@ try {
     Invoke-Logged 'npm.cmd' @('run', 'build')
     Push-Location (Join-Path $taskRoot 'android')
     try {
-        $taskGradleArgs = @('--console=plain', ':app:assembleRelease')
+        $taskGradleArgs = @('--console=plain', ':app:assembleRelease', ':app:lintRelease')
+        if (!$SkipTests) { $taskGradleArgs += ':app:testDebugUnitTest' }
         if ($Offline) { $taskGradleArgs = @('--offline') + $taskGradleArgs }
         Invoke-Logged $taskGradle $taskGradleArgs
     } finally { Pop-Location }

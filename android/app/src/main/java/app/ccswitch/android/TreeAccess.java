@@ -143,7 +143,7 @@ final class TreeAccess implements TransactionEngine.Port {
     }
     TransactionEngine.Port port(String relative) throws Exception {
         validPath(relative);
-        if (!relative.equals("AGENTS.md") && !relative.matches("skills/[A-Za-z0-9_-]{1,80}/SKILL\\.md")) throw new AppFailure("write_scope", "本版本仅修改 config.toml、AGENTS.md 和用户技能 SKILL.md。");
+        if (!relative.matches("cc-switch-model-catalog-[a-f0-9]{1,16}\\.json") && !relative.equals("AGENTS.md") && !relative.matches("skills/[A-Za-z0-9_-]{1,80}/SKILL\\.md")) throw new AppFailure("write_scope", "本版本仅修改 config.toml、AGENTS.md 和用户技能 SKILL.md。");
         return new TransactionEngine.Port() {
             @Override public byte[] read() throws Exception { return readFile(relative); }
             @Override public void write(byte[] bytes) throws Exception { writeFile(relative, bytes); }

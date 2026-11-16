@@ -1,407 +1,377 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { X, Eye, EyeOff, ArrowLeft, Check } from "lucide-react";
-import type { Provider, AuthKind } from "./core/types";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import type { Provider } from "./core/types";
+import { validateProvider } from "./core/codex";
+import { parseConfig } from "./core/tomlPatch";
+import { invoke, isNative } from "./bridge";
+import { FullScreenPanel } from "./vendor/components/common/FullScreenPanel";
+import { BasicFormFields } from "./vendor/components/providers/forms/BasicFormFields";
+import { CodexFormFields } from "./vendor/components/providers/forms/CodexFormFields";
+import CodexConfigEditor from "./vendor/components/providers/forms/CodexConfigEditor";
+import { useCodexConfigState } from "./vendor/components/providers/forms/hooks/useCodexConfigState";
+import { Form } from "./vendor/components/ui/form";
+import { Button } from "./vendor/components/ui/button";
+import { Switch } from "./vendor/components/ui/switch";
 import {
-  formValues,
-  newProvider,
-  updateFormConfig,
-  editRawConfig,
-  validateProvider,
-} from "./core/codex";
-import { patchPath } from "./core/tomlPatch";
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "操作未完成";
-export function Modal({
-  title,
-  children,
-  onClose,
-  busy = false,
-}: {
-  title: string;
-  children: ReactNode;
-  onClose: () => void;
-  busy?: boolean;
-}) {
-  const element = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  const busyRef = useRef(busy);
-  busyRef.current = busy;
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const el = element.current!;
-    el.focus();
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busyRef.current) {
-        event.preventDefault();
-        closeRef.current();
-      }
-      if (event.key === "Tab") {
-        const all = [
-          ...el.querySelectorAll<HTMLElement>(
-            'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',
-          ),
-        ].filter((item) => item.getClientRects().length);
-        const first = all[0],
-          last = all[all.length - 1];
-        if (!first) {
-          event.preventDefault();
-          return;
-        }
-        if (
-          event.shiftKey &&
-          (document.activeElement === first || document.activeElement === el)
-        ) {
-          event.preventDefault();
-          last.focus();
-        } else if (
-          !event.shiftKey &&
-          (document.activeElement === last || document.activeElement === el)
-        ) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    el.addEventListener("keydown", key);
-    const old = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      el.removeEventListener("keydown", key);
-      document.body.style.overflow = old;
-      previous?.focus();
-    };
-  }, []);
-  return (
-    <div className="modal-overlay">
-      <div
-        ref={element}
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        tabIndex={-1}
-      >
-        <header className="modal-header">
-          <h2>{title}</h2>
-          <button
-            className="icon-button"
-            disabled={busy}
-            aria-label="关闭"
-            onClick={onClose}
-          >
-            <X />
-          </button>
-        </header>
-        {children}
-      </div>
-    </div>
-  );
-}
-
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./vendor/components/ui/dialog";
+import {
+  parseBodyOverrideJson,
+  parseHeaderOverrideJson,
+} from "./vendor/lib/requestOverrides";
+import type { ProviderFormData } from "./vendor/lib/schemas/provider";
+import type {
+  CodexApiFormat,
+  CodexChatReasoning,
+  PromptCacheRoutingMode,
+  ClaudeApiKeyField,
+} from "./vendor/types";
+export { Modal } from "./Modal";
+export const FILTER_NAME = "历史推理与ID过滤（解决不同源错误）";
 export function ProviderEditor({
   provider,
   onClose,
   onSave,
-  busy,
+  busy = false,
   saveError,
 }: {
-  saveError: string;
   provider: Provider;
   onClose: () => void;
-  onSave: (provider: Provider) => Promise<void>;
-  busy: boolean;
+  onSave: (p: Provider) => Promise<void>;
+  busy?: boolean;
+  saveError?: string;
 }) {
-  const [draft, setDraft] = useState<Provider>(() => structuredClone(provider));
-  const [fields, setFields] = useState(() => formValues(provider));
-  const [rawMode, setRawMode] = useState(false);
-  const [visible, setVisible] = useState(false);
-  const [error, setError] = useState("");
-  const setField = (key: keyof typeof fields, value: string) => {
-    const nextFields = { ...fields, [key]: value };
-    setFields(nextFields);
-    try {
-      let config = draft.settingsConfig.config;
-      if (draft.authKind !== "official") {
-        config = updateFormConfig(config, {
-          name: draft.name,
-          model: nextFields.model,
-          baseUrl: nextFields.baseUrl,
-          effort: nextFields.effort,
-          envKey: draft.authKind === "env" ? nextFields.envKey : undefined,
-        });
-        if (key === "apiKey") {
-          config = patchPath(
-            config,
-            ["model_providers", "custom", "experimental_bearer_token"],
-            undefined,
-          );
-          config = patchPath(config, ["experimental_bearer_token"], undefined);
-        }
-      } else {
-        config = patchPath(config, ["model"], nextFields.model || undefined);
-        config = patchPath(
-          config,
-          ["model_reasoning_effort"],
-          nextFields.effort || undefined,
-        );
+  const c = useCodexConfigState({ initialData: provider });
+  const form = useForm<ProviderFormData>({
+    defaultValues: {
+      name: provider.name,
+      notes: provider.notes ?? "",
+      websiteUrl: provider.websiteUrl ?? "",
+      icon: provider.icon ?? "",
+      iconColor: provider.iconColor ?? "",
+      settingsConfig: JSON.stringify(provider.settingsConfig),
+    },
+  });
+  const [meta, setMeta] = useState<Record<string, any>>({ ...provider.meta });
+  const change = (key: string, value: unknown) =>
+    setMeta((prev) => ({ ...prev, [key]: value }));
+  const [filter, setFilter] = useState(provider.historyFilter === true),
+    [prompt, setPrompt] = useState(false),
+    [error, setError] = useState(""),
+    [endpointModal, setEndpointModal] = useState(false);
+  const [headers, setHeaders] = useState(
+      JSON.stringify(meta.localProxyRequestOverrides?.headers ?? {}, null, 2),
+    ),
+    [body, setBody] = useState(
+      JSON.stringify(meta.localProxyRequestOverrides?.body ?? {}, null, 2),
+    );
+  const [power, setPower] = useState<{
+    unrestricted: boolean;
+    notifications: boolean;
+  } | null>(null);
+  const checkPower = () => {
+    if (isNative)
+      invoke("backgroundStatus")
+        .then(setPower)
+        .catch(() => {});
+  };
+  useEffect(() => {
+    checkPower();
+    window.addEventListener("focus", checkPower);
+    window.addEventListener("ccswitch-resume", checkPower);
+    const listener = () => {
+      if (!document.hidden) checkPower();
+    };
+    document.addEventListener("visibilitychange", listener);
+    return () => {
+      window.removeEventListener("focus", checkPower);
+      window.removeEventListener("ccswitch-resume", checkPower);
+      document.removeEventListener("visibilitychange", listener);
+    };
+  }, []);
+  const enable = async (settings: boolean) => {
+    setFilter(true);
+    setPrompt(false);
+    if (isNative) {
+      try {
+        await invoke("requestNotifications");
+        if (settings) await invoke("openBatterySettings");
+        checkPower();
+      } catch (e) {
+        setError(String(e));
       }
-      setDraft({
-        ...draft,
-        settingsConfig: { config, auth: { OPENAI_API_KEY: nextFields.apiKey } },
-      });
-      setError("");
-    } catch (e) {
-      setError(errorMessage(e));
     }
   };
-  const changeKind = (kind: AuthKind) => {
-    if (kind === "official" || draft.authKind === "official") {
-      const next = newProvider(kind);
-      next.id = draft.id;
-      next.name = draft.name;
-      next.notes = draft.notes;
-      setDraft(next);
-      setFields(formValues(next));
-    } else setDraft({ ...draft, authKind: kind });
-  };
-  const submit = async () => {
+  let configError = "";
+  try {
+    parseConfig(c.codexConfig);
+  } catch (e) {
+    configError = (e as Error).message;
+  }
+  const save = async () => {
+    setError("");
     try {
-      let result = structuredClone(draft);
-      if (!rawMode && result.authKind !== "official")
-        result.settingsConfig.config = updateFormConfig(
-          result.settingsConfig.config,
-          {
-            name: result.name,
-            model: fields.model,
-            baseUrl: fields.baseUrl,
-            effort: fields.effort,
-            envKey: result.authKind === "env" ? fields.envKey : undefined,
+      if (configError) throw Error(configError);
+      const auth = JSON.parse(c.codexAuth || "{}");
+      if (!auth || Array.isArray(auth) || typeof auth !== "object")
+        throw Error("auth.json 必须是 JSON 对象");
+      const h = parseHeaderOverrideJson(headers),
+        b = parseBodyOverrideJson(body);
+      if (h.error || b.error) throw Error(h.error || b.error);
+      const models = c.codexCatalogModels
+        .filter((m) => m.model.trim())
+        .map((m) => ({
+          ...m,
+          model: m.model.trim(),
+          contextWindow: m.contextWindow
+            ? Number(String(m.contextWindow).replace(/[^0-9]/g, ""))
+            : undefined,
+        }));
+      if (new Set(models.map((m) => m.model)).size !== models.length)
+        throw Error("模型列表包含重复名称");
+      if (
+        models.some(
+          (m) =>
+            m.contextWindow !== undefined &&
+            (!Number.isSafeInteger(m.contextWindow) || m.contextWindow <= 0),
+        )
+      )
+        throw Error("上下文窗口必须是正整数");
+      await onSave(
+        validateProvider({
+          ...provider,
+          ...form.getValues(),
+          loginPolicy: meta.androidLoginPolicy ?? provider.loginPolicy,
+          settingsConfig: {
+            auth,
+            config: c.codexConfig,
+            modelCatalog: {
+              models,
+              autoReviewModel: c.codexAutoReviewModel,
+              officialSpeedTiers: c.codexOfficialSpeedTiers,
+            },
           },
-        );
-      result = validateProvider(result);
-      setError("");
-      await onSave(result);
+          meta: {
+            ...meta,
+            localProxyRequestOverrides: { headers: h.headers, body: b.value },
+          },
+          historyFilter: filter,
+        }),
+      );
     } catch (e) {
-      setError(errorMessage(e));
+      setError((e as Error).message);
     }
   };
   return (
-    <Modal
-      title={provider.name ? "编辑服务商" : "添加服务商"}
-      busy={busy}
+    <FullScreenPanel
+      isOpen
+      title={provider.name ? "编辑供应商" : "添加供应商"}
+      subtitle="Codex · 自定义配置"
       onClose={onClose}
-    >
-      <div className="modal-body editor-body">
-        {(error || saveError) && (
-          <p role="alert" className="inline-warning">
-            {error || saveError}
-          </p>
-        )}
-        <label className="field">
-          <span>
-            名称 <em>*</em>
-          </span>
-          <input
-            value={draft.name}
-            maxLength={100}
-            placeholder="例如：我的 API 服务"
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          />
-        </label>
-        <label className="field">
-          <span>认证方式</span>
-          <select
-            value={draft.authKind}
-            onChange={(e) => changeKind(e.target.value as AuthKind)}
-          >
-            <option value="apiKey">API Key · 原生 Responses</option>
-            <option value="official">Codex 已有官方登录</option>
-            <option value="env">Codex 进程环境变量</option>
-            <option value="none">无认证服务</option>
-          </select>
-        </label>
-        {draft.authKind === "official" && (
-          <p className="inline-info">
-            切回 Codex 已有的官方登录。此处无法读取或切换钥匙串账号，登录需要在
-            Codex 中完成。
-          </p>
-        )}
-        <div className="segmented editor-tabs">
-          <button
-            className={!rawMode ? "chosen" : ""}
-            onClick={() => {
-              try {
-                setFields(formValues(draft));
-                setRawMode(false);
-                setError("");
-              } catch (e) {
-                setError(errorMessage(e));
-              }
-            }}
-          >
-            基本设置
-          </button>
-          <button
-            className={rawMode ? "chosen" : ""}
-            onClick={() => setRawMode(true)}
-          >
-            高级 TOML
-          </button>
+      contentClassName="mobile-provider space-y-6 p-4"
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            取消
+          </Button>
+          <Button onClick={save} disabled={busy}>
+            保存
+          </Button>
         </div>
-        {!rawMode ? (
-          <>
-            {draft.authKind !== "official" && (
-              <label className="field">
-                <span>服务地址</span>
-                <input
-                  type="url"
-                  inputMode="url"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  placeholder="https://api.example.com/v1"
-                  value={fields.baseUrl}
-                  onChange={(e) => setField("baseUrl", e.target.value)}
-                />
-                <small>填写完整 API 基础地址，保留服务商要求的路径。</small>
+      }
+    >
+      <Form {...form}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+          className="space-y-6"
+        >
+          <BasicFormFields form={form} />
+          <CodexFormFields
+            appId="codex"
+            variant="classic"
+            category="custom"
+            codexApiKey={c.codexApiKey}
+            onApiKeyChange={c.handleCodexApiKeyChange}
+            shouldShowApiKeyLink={false}
+            websiteUrl={form.watch("websiteUrl") ?? ""}
+            shouldShowSpeedTest
+            codexBaseUrl={c.codexBaseUrl}
+            onBaseUrlChange={c.handleCodexBaseUrlChange}
+            isFullUrl={meta.isFullUrl ?? false}
+            onFullUrlChange={(v) => change("isFullUrl", v)}
+            isEndpointModalOpen={endpointModal}
+            onEndpointModalToggle={setEndpointModal}
+            onCustomEndpointsChange={(v) => change("customEndpoints", v)}
+            autoSelect={meta.autoSelect ?? false}
+            onAutoSelectChange={(v) => change("autoSelect", v)}
+            speedTestEndpoints={(meta.customEndpoints ?? []).map(
+              (url: string) => ({ url }),
+            )}
+            codexModel={c.codexModel}
+            onModelChange={c.handleCodexModelChange}
+            subagentModel={c.codexSubagentModel}
+            onSubagentModelChange={c.handleCodexSubagentModelChange}
+            subagentReasoningEffort={c.codexSubagentReasoningEffort}
+            onSubagentReasoningEffortChange={
+              c.handleCodexSubagentReasoningEffortChange
+            }
+            agentMaxThreads={c.codexAgentMaxThreads}
+            multiAgentV2Total={c.codexMultiAgentV2Total}
+            onAgentMaxThreadsChange={c.handleCodexAgentMaxThreadsChange}
+            apiFormat={(meta.apiFormat ?? "openai_responses") as CodexApiFormat}
+            onApiFormatChange={(v) => change("apiFormat", v)}
+            anthropicAuthField={
+              (meta.anthropicAuthField ?? "x-api-key") as ClaudeApiKeyField
+            }
+            onAnthropicAuthFieldChange={(v) => change("anthropicAuthField", v)}
+            impersonateClaudeCode={meta.impersonateClaudeCode ?? false}
+            onImpersonateClaudeCodeChange={(v) =>
+              change("impersonateClaudeCode", v)
+            }
+            maxOutputTokens={String(meta.maxOutputTokens ?? "")}
+            onMaxOutputTokensChange={(v) => change("maxOutputTokens", v)}
+            codexChatReasoning={meta.codexChatReasoning as CodexChatReasoning}
+            onCodexChatReasoningChange={(v) => change("codexChatReasoning", v)}
+            promptCacheRouting={
+              (meta.promptCacheRouting ?? "auto") as PromptCacheRoutingMode
+            }
+            onPromptCacheRoutingChange={(v) => change("promptCacheRouting", v)}
+            catalogModels={c.codexCatalogModels}
+            onCatalogModelsChange={c.setCodexCatalogModels}
+            autoReviewModel={c.codexAutoReviewModel}
+            onAutoReviewModelChange={c.setCodexAutoReviewModel}
+            officialSpeedTiers={c.codexOfficialSpeedTiers}
+            onOfficialSpeedTiersChange={c.setCodexOfficialSpeedTiers}
+            customUserAgent={meta.customUserAgent ?? ""}
+            onCustomUserAgentChange={(v) => change("customUserAgent", v)}
+            localProxyHeadersOverride={headers}
+            onLocalProxyHeadersOverrideChange={setHeaders}
+            localProxyBodyOverride={body}
+            onLocalProxyBodyOverrideChange={setBody}
+          />
+          <section className="rounded-panel border p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="history-filter" className="font-medium">
+                {FILTER_NAME}
               </label>
-            )}
-            {draft.authKind === "apiKey" && (
-              <label className="field">
-                <span>API Key</span>
-                <div className="password-field">
-                  <input
-                    type={visible ? "text" : "password"}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    value={fields.apiKey}
-                    placeholder="输入 API Key"
-                    onChange={(e) => setField("apiKey", e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={visible ? "隐藏 API Key" : "显示 API Key"}
-                    onClick={() => setVisible(!visible)}
-                  >
-                    {visible ? <EyeOff /> : <Eye />}
-                  </button>
-                </div>
-                <small>
-                  方案密钥在本机加密保存。应用后写入 Codex 的服务商配置表。
-                </small>
-              </label>
-            )}
-            {draft.authKind === "env" && (
-              <label className="field">
-                <span>环境变量名</span>
-                <input
-                  value={fields.envKey}
-                  placeholder="CODEX_API_KEY"
-                  autoCapitalize="none"
-                  onChange={(e) => setField("envKey", e.target.value)}
-                />
-                <small>需要 Codex 宿主预先注入。本应用只能保存变量名。</small>
-              </label>
-            )}
-            {draft.authKind === "none" && (
-              <p className="inline-info">
-                适用于明确无需认证的服务。不会发送 Codex 的官方登录凭据。
-              </p>
-            )}
-            <label className="field">
-              <span>模型</span>
-              <input
-                value={fields.model}
-                placeholder={
-                  draft.authKind === "official"
-                    ? "留空使用 Codex 默认值"
-                    : "服务商支持的模型名称"
+              <Switch
+                id="history-filter"
+                checked={filter}
+                onCheckedChange={(v) =>
+                  v ? setPrompt(true) : setFilter(false)
                 }
-                autoCapitalize="none"
-                spellCheck={false}
-                onChange={(e) => setField("model", e.target.value)}
               />
-            </label>
-            <label className="field">
-              <span>推理强度</span>
-              <select
-                value={fields.effort}
-                onChange={(e) => setField("effort", e.target.value)}
-              >
-                <option value="">Codex 默认</option>
-                {[
-                  "none",
-                  "minimal",
-                  "low",
-                  "medium",
-                  "high",
-                  "xhigh",
-                  "max",
-                  "ultra",
-                ].map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
-              </select>
-              <small>可用档位由服务商和模型决定。</small>
-            </label>
-          </>
-        ) : (
-          <label className="field">
-            <span>供应商 config.toml</span>
-            <textarea
-              className="toml-editor"
-              rows={15}
-              spellCheck={false}
-              autoCapitalize="none"
-              value={draft.settingsConfig.config}
-              onChange={(e) => setDraft(editRawConfig(draft, e.target.value))}
-            />
-            <small>
-              支持请求头、重试、上下文窗口、模型等原生参数。只投影服务商相关字段；模板中的
-              MCP、项目和用户设置不会覆盖现有配置。此编辑器可能含密钥。
-            </small>
-          </label>
-        )}
-        {draft.authKind !== "official" && (
-          <label className="field">
-            <span>保留官方登录界面</span>
+            </div>
+            <p className="text-caption text-fg-2">
+              应用此方案后，Codex 请求经 CC Switch
+              本机中转，移除历史推理项及可重建条目的
+              ID。保留本轮思考强度、正文及工具
+              call_id。加密压缩上下文无法安全转换时会报错。
+            </p>
+            {filter && (
+              <>
+                <p className="text-caption text-fg-2">
+                  需要持续后台运行。保存方案后还需应用；关闭后重新应用恢复直连，并重启
+                  Codex。
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setPrompt(true)}
+                >
+                  后台运行设置
+                  {power
+                    ? power.unrestricted
+                      ? " · 已解除电池优化"
+                      : " · 需检查电池限制"
+                    : ""}
+                </Button>
+              </>
+            )}
+          </section>
+          <CodexConfigEditor
+            authValue={c.codexAuth}
+            configValue={c.codexConfig}
+            providerName={form.watch("name")}
+            onAuthChange={c.setCodexAuth}
+            onConfigChange={c.handleCodexConfigChange}
+            authError={c.codexAuthError}
+            configError={configError}
+          />
+          <p className="text-caption text-fg-2">
+            auth.json 作为此方案的认证输入保存。应用 API Key 方案时写入服务商
+            bearer token，保留 Codex 的 auth.json
+            和钥匙串登录材料。其他本地代理参数需要启用中转；协议转换尚未移植的选项会在应用时明确报错。
+          </p>
+          <label className="block text-body">
+            保留官方登录界面
             <select
-              value={draft.loginPolicy}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  loginPolicy: e.target.value as Provider["loginPolicy"],
-                })
-              }
+              className="mt-2 block w-full border rounded-control p-2 bg-surface"
+              value={meta.androidLoginPolicy ?? provider.loginPolicy}
+              onChange={(e) => change("androidLoginPolicy", e.target.value)}
             >
-              <option value="auto">自动 · 按 auth.json 中的登录材料</option>
-              <option value="keep">启用 · 我已在 Codex 中登录</option>
+              <option value="auto">自动</option>
+              <option value="keep">启用（已在 Codex 中登录）</option>
               <option value="omit">关闭</option>
             </select>
-            <small>钥匙串登录无法自动确认。此设置不迁移或删除账号。</small>
           </label>
-        )}
-        <label className="field">
-          <span>备注</span>
-          <textarea
-            rows={2}
-            maxLength={2000}
-            value={draft.notes ?? ""}
-            placeholder="可选"
-            onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-          />
-        </label>
-      </div>
-      <footer className="modal-footer">
-        <button className="button" disabled={busy} onClick={onClose}>
-          <ArrowLeft /> 返回
-        </button>
-        <button className="button primary" disabled={busy} onClick={submit}>
-          <Check /> 保存方案
-        </button>
-      </footer>
-    </Modal>
+          {(error || saveError) && (
+            <p role="alert" className="text-danger-text break-words">
+              {error || saveError}
+            </p>
+          )}
+        </form>
+      </Form>
+      <Dialog open={prompt} onOpenChange={setPrompt}>
+        <DialogContent
+          zIndex="top"
+          className="max-w-[calc(100vw-24px)] sm:max-w-lg"
+        >
+          <DialogHeader>
+            <DialogTitle>允许 CC Switch 持续后台运行</DialogTitle>
+            <DialogDescription>
+              开启“{FILTER_NAME}”后，CC Switch 需要作为本机路由持续运行。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-auto overflow-y-auto space-y-3 text-body px-5">
+            <p>
+              请在系统设置中允许后台活动，并将 CC Switch
+              的电池使用设为“不受限制”或关闭电池优化。若一加系统提供自启动、后台冻结限制，也请允许。
+            </p>
+            <p>
+              请允许通知，以显示中转运行状态。锁屏、系统清理或手动强制停止应用可能中断
+              Codex 请求；后台设置不能保证进程永不被系统终止。
+            </p>
+            <p>
+              此功能无法跨供应商复用加密压缩历史。出现相关提示时，请用文本摘要开启新会话。
+            </p>
+            {power && (
+              <p>
+                系统电池优化：{power.unrestricted ? "已豁免" : "尚未豁免"}
+                ；通知：{power.notifications ? "已允许" : "尚未允许"}
+                。厂商后台限制需要你在设置中检查。
+              </p>
+            )}
+          </div>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setPrompt(false)}>
+              取消
+            </Button>
+            <Button variant="secondary" onClick={() => void enable(false)}>
+              已了解，开启
+            </Button>
+            <Button onClick={() => void enable(true)}>开启并前往设置</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </FullScreenPanel>
   );
 }

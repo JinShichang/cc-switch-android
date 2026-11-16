@@ -1,58 +1,53 @@
 # CC Switch Android
 
-独立运行的 Codex 配置管理 APK，基于 CC Switch 4.0.33。采用上游 React 界面和 Android 原生 SAF，不需要 PRoot、Root、ADB 或所有文件访问权限。默认简体中文、130% 缩放。
+独立 Android APK，基于 CC Switch 4.0.33（MIT），只管理 Codex。直接运行于 Android，无需 PRoot、Root、ADB 或所有文件访问权限。默认简体中文、100% 缩放，使用 CC Switch 原始图标。
 
-当前版本 **0.2.0**。已通过主机逻辑测试、浏览器手机布局检查及 APK 编译；**未在本次会话中验证真实 Android SAF 读写，也未确认已接通手机上的 Codex**。
+当前版本 **0.3.0**，ARM64，最低 Android 11 / API 30，目标 API 37。**本次已完成主机测试和手机尺寸浏览器验证；尚未在一加 13 实机验证 SAF、后台保活或接通 Codex。**
 
 ## 安装与连接
 
-1. 用交付目录中的 cc-switch-android-0.2.0.apk 直接覆盖安装上一版，保留原签名和本地方案。升级时默认缩放调整为130%，之后用户修改会持久保存。
-2. 点击连接，打开系统 DocumentsUI。展开侧栏“位置”，选择 Codex，再选择整个 .codex 根目录并“使用此文件夹”。Codex 的安装 UUID 和 content URI 都不当作文件路径处理。
-3. 设置 → 应用配置会显示系统文件组件与 Codex 文档提供方的检测结果。本地 Codex 源码已有 DocumentsProvider；手机需要安装包含该实现的 Codex 版本，且完成环境初始化。
-4. 也可选择专用普通 SAF 测试目录；应用会标明普通目录，不把测试结果称作已接通 Codex。
-5. 保存方案后点击启用。写入前备份、检查外部修改，写入后读回确认。完全重启 Codex，再用新会话确认模型、服务地址及 MCP。
+1. 安装交付目录的 cc-switch-android-0.3.0.apk，可用相同签名覆盖 0.2.0。升级时缩放一次性调整为 100%，后续修改持久保存。
+2. 点击“连接”，在系统 DocumentsUI 的位置侧栏选择 Codex，授权整个 .codex 目录。手机必须先安装包含 DocumentsProvider 的 Codex 版本。CC Switch 不猜测安装 UUID，也不将 content URI 当作路径。
+3. 可先授权普通 SAF 测试目录。应用会区分普通目录与 Codex 文档提供方；普通目录测试不代表接通 Codex。
+4. 保存供应商方案，再点击“启用”。写入前备份与版本检查，写后读回核验。完全重启 Codex，在新会话确认最终服务商与模型。
 
-## 页面与功能
+## 本版变化
 
-| 页面 | 0.2.0 实现 |
-| --- | --- |
-| Codex 供应商 | 增删改、复制、导入导出、当前配置识别、保留无关字段的一键切换 |
-| MCP | 从 config.toml 读取完整服务列表，添加、编辑、启停、删除、JSON 导入；保留其他 MCP 与用户设置 |
-| Skills | 扫描 skills 下的 SKILL.md；浏览全部，编辑一级用户技能、导入单个 SKILL.md；内置 / 嵌套技能只读 |
-| 提示词 | 本地提示库增删改、导入导出；备份后启用 / 停用 AGENTS.md；识别外部自定义文档 |
-| 会话 | sessions 与 archived_sessions 的最近日志列表和对话阅读；只读 |
-| 授权中心 | 展示文件中可观察的认证来源、本地 Key 方案数量；打开 Codex 处理官方和 MCP 登录 |
-| 用量统计 | 有边界地扫描最近日志，展示 Token 快照；按会话 ID 去重、排除派生会话历史副本 |
-| 设置 | 默认130%，输入框及左右±10%；主题；目录诊断；导入导出；配置和文档备份各10份 |
+- 直接复用上游完整自定义供应商表单：名称/图标、备注、官网、API Key、地址/测速、模型列表及思考等级、子代理、自动审批、高级参数、auth.json/TOML 编辑器、远程压缩及 1M 设置。去掉云供应商预设入口，仅作手机排列调整。
+- 直接复用上游完整会话管理与阅读器：搜索、按时间/项目分组、首末消息、复制、菜单、执行过程、查找和 Markdown 导出。
+- 直接复用上游用量仪表板：日期/供应商/模型筛选、指标与趋势/热力图、请求/供应商/模型表格、详情、分页、列选择、定价和同步设置。
+- 生成独立模型目录文件，核验后切换配置指针。保留无关 MCP、项目、工作目录、认证存储模式和用户字段。
+- 新增“历史推理与ID过滤（解决不同源错误）”：真正的 Android 前台中转服务，常驻通知与状态计数；开启弹出后台/电池/通知设置提示。
+- 默认 100%，缩放输入框左右按钮每次 ±10%。
 
-复用上游 Sidebar、AppPageHeader、PromptListItem、按钮、分段控件、菜单、中文资源、完整样式及原始图标。手机窄屏把侧栏折为抽屉，保留导航顺序和样式。Android 后端通过 ContentResolver 访问用户授权的文档树。
+## 历史过滤
 
-## 认证和功能边界
+Codex → 127.0.0.1:18181 的 CC Switch 中转 → 所选供应商。仅监听本机，独立随机路由凭据，上游密钥保存在设备绑定的加密存储；不记录请求正文或密钥。
 
-第三方原生 Responses Key 写入 config.toml 的 model_providers.custom.experimental_bearer_token；保留 auth.json、钥匙串、MCP、工作目录及用户字段。官方方案只切回官方路由，不能通过 SAF 读取或修改钥匙串、刷新 OAuth、管理账号。环境变量须由 Codex 宿主注入。
+开启后，应用方案时先确认服务就绪，再写配置。需要允许后台活动、解除电池优化并允许通知；一加厂商的额外后台限制需用户检查。系统仍可能终止进程。被强制停止或手机重启后，先打开 CC Switch，在设置中“恢复中转”。关闭过滤后重新应用方案恢复直连，并重启 Codex。
 
-尚未实现桌面代理、Chat/Anthropic 转换、OAuth 多账号、MCP OAuth 操作、完整技能包安装/市场、会话续接/删除、服务商计费和余额、WebDAV、模型目录生成。上述页面已恢复，但不声称具有桌面端全部能力。用量是日志快照，复杂分段/压缩可能不完整；界面显示扫描范围及异常。
+过滤历史 reasoning 项与可重建条目的顶层 id；保留正文、call_id、嵌套资源 ID、本轮 reasoning.effort。强制 store=false，移除 reasoning.encrypted_content 请求项。响应引用、加密压缩历史、/responses/compact 和 WebSocket 明确拒绝；需文本摘要新会话。支持 identity/gzip/deflate/br/zstd 请求，压缩前后均限制 64 MiB，SSE 原样流转，POST 不自动重试。
+
+## 能力边界
+
+表单与页面保持完整，但以下 Android 后端能力有明确边界：
+
+- 当前仅支持原生 Responses；Chat/Anthropic 转换字段保留，应用不支持格式时明确报错。
+- OAuth 登录、钥匙串、MCP OAuth 仍由 Codex 管理。auth.json 编辑器保存方案输入，应用 API Key 时写 provider bearer，不覆盖 Codex auth.json 或钥匙串。
+- 会话启动、删除及打开私有项目路径需要宿主配合；保留菜单并说明。图片资源暂不读取，会话正文、工具调用和可见推理可读。
+- 用量来自授权会话日志，HTTP 状态/精确耗时未知；金额按用户定价估算。继承历史和不完整文件暂缓统计，避免重复记账。目录最多 5000 节点/1000 日志；每文件最多 32 MiB、100000 行、2000 投影事件/2 MiB，界面显示边界与异常。
+- 模型能力使用内置原生 Responses 模板；仅 gpt-5.5 有内置官方模板。其他模型的实际能力需用户填写或获取后核对。无法查询宿主捆绑模型目录。
+- 桌面自动测速切换、完整技能包市场/安装、服务商余额、云同步尚未移植。MCP、用户 SKILL.md、提示词及各 10 份事务备份沿用已有实现。
 
 ## 构建
 
-已验证：Node24、JDK21、Gradle9.4.1、AGP9.2.1、SDK37、Build Tools36.0.0。最低API30，目标API37；APK 无自定义原生库，支持 ARM64。
+工具链：Node 24、JDK 21、Gradle 9.4.1、AGP 9.2.1、SDK 37、Build Tools 36.0.0，位于工作区 .tooling。
 
-```powershell
+~~~powershell
 cd C:\AI-Projects\codex-android\cc-switch-android
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build.ps1 -Offline
-```
+~~~
 
-工具链和缓存位于工作区 .tooling，保留已有签名文件，不执行 clean。其他电脑首次构建去掉 Offline，并用 Tooling 参数指定工具链。详见 [构建说明](docs/build.md)。
+构建保留 npm/Gradle 缓存和已有签名。新增依赖首次需去掉 Offline 下载。详见 [构建说明](docs/build.md)、[验证范围](docs/validation.md)、[实机清单](docs/device-test.md) 和 [Codex 对接要求](docs/codex-provider-contract.md)。
 
-## 验证与对接
-
-- [验证范围](docs/validation.md)
-- [实机测试](docs/device-test.md)
-- [Codex DocumentsProvider 合约](docs/codex-provider-contract.md)
-- [移植评估](docs/porting-assessment.md)
-
-本项目为独立 Git 仓库，没有修改 Codex 源码。
-
-## 许可证
-
-MIT，保留 CC Switch © 2025 Jason Young。原文见 LICENSE；第三方声明见 THIRD_PARTY_NOTICES.txt，并嵌入设置 → 关于 → 开源许可。此独立移植不代表上游官方发布。
+源码为独立 Git 仓库，没有修改 Codex 工程。保留 MIT 版权及第三方许可于 LICENSE、THIRD_PARTY_NOTICES.txt 和应用“关于”。用户提供的 agentrouter 只作为过滤行为参考，未发现许可证，不分发其源码。
