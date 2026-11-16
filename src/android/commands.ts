@@ -3,9 +3,11 @@ import { parseSessionIndex } from "../core/workspace";
 import {
   sessionMeta,
   sessionUsage,
+  resolveUsageFiles,
   transcript,
   type EventFile,
 } from "./sessionData";
+import { normalizeCodexUsageModel } from "../upstream/codexUsage";
 import type { RequestLog, ModelPricing } from "../vendor/types/usage";
 import {
   buildTurns,
@@ -120,16 +122,19 @@ async function sync() {
     for (const key of usageCache.keys())
       if (!paths.has(key)) usageCache.delete(key);
     let deferred = 0,
+      partial = 0,
+      noUsage = 0,
       skipped = 0;
     const errors: string[] = [],
       rows: RequestLog[] = [];
+    const parsedFiles: ReturnType<typeof sessionUsage>[] = [];
     for (const f of list.files)
       try {
         if (active !== generation) throw Error("目录已更改");
         const stamp =
           f.modified > 0 ? f.modified + ":" + f.size : String(Date.now());
         let entry = usageCache.get(f.path);
-        if (!entry || entry.stamp !== stamp) {
+        if (!entry || entry.stamp !== stamp || entry.parsed.partial) {
           const data = await invoke<EventFile>("readSession", {
             path: f.path,
             usageOnly: true,
@@ -137,13 +142,22 @@ async function sync() {
           entry = { stamp, parsed: sessionUsage(data) };
           usageCache.set(f.path, entry);
         }
-        const parsed = entry.parsed;
-        if (parsed.deferred) deferred++;
-        else rows.push(...parsed.rows);
+        parsedFiles.push(entry.parsed);
       } catch {
         errors.push(f.path + "：读取失败");
       }
     if (active !== generation) throw Error("目录已更改，请重新同步。");
+    const reasons = new Map<string, number>();
+    for (const parsed of resolveUsageFiles(parsedFiles)) {
+      if (parsed.partial) partial++;
+      for (const warning of parsed.warnings)
+        reasons.set(warning, (reasons.get(warning) ?? 0) + 1);
+      if (parsed.deferred) deferred++;
+      else {
+        rows.push(...parsed.rows);
+        if (!parsed.rows.length) noUsage++;
+      }
+    }
     const seen = new Set<string>();
     logs = rows.filter((r) => {
       if (seen.has(r.requestId)) {
@@ -156,10 +170,21 @@ async function sync() {
     syncAt = Date.now();
     window.dispatchEvent(
       new CustomEvent("android-data-warning", {
-        detail:
-          errors.length || deferred || list.truncated
-            ? `扫描 ${list.files.length} 个文件：${deferred} 个继承/不完整日志暂缓统计，${errors.length} 个读取失败${list.truncated ? "，目录达到扫描上限" : ""}。`
-            : "",
+        detail: [
+          `扫描 ${list.files.length} 个文件，读取到 ${logs.length} 条用量记录。`,
+          deferred ? `${deferred} 个继承日志暂缓统计。` : "",
+          noUsage ? `${noUsage} 个文件没有可统计的用量事件。` : "",
+          errors.length ? `${errors.length} 个读取失败。` : "",
+          list.truncated ? "目录达到扫描上限。" : "",
+          ...[...reasons]
+            .slice(0, 4)
+            .map(([reason, count]) => `${count} 个文件：${reason}。`),
+          !logs.length
+            ? "没有读到可统计用量；请确认 Codex 已完成请求并写入会话日志。"
+            : "请按时间范围筛选；历史记录可能不在“当天”内。",
+        ]
+          .filter(Boolean)
+          .join(" "),
       }),
     );
     window.dispatchEvent(new CustomEvent("usage-log-recorded"));
@@ -169,6 +194,8 @@ async function sync() {
       filesScanned: list.files.length,
       suspectedDuplicates: skipped,
       deferredFiles: deferred + (list.truncated ? 1 : 0),
+      partialFiles: partial,
+      filesWithoutUsage: noUsage,
       errors,
     };
   })();
@@ -180,22 +207,25 @@ async function sync() {
 }
 function priced(rows: RequestLog[], pricing: ModelPricing[]) {
   return rows.map((r) => {
-    const p = pricing.find((p) => p.modelId === r.model);
+    const p = pricing.find(
+      (p) => normalizeCodexUsageModel(p.modelId) === r.model,
+    );
     if (!p) return r;
     const cost = (n: number, s: string) => ((n * Number(s)) / 1e6).toFixed(8);
     const a = cost(
-        Math.max(0, r.inputTokens - r.cacheReadTokens),
+        Math.max(0, r.inputTokens - r.cacheReadTokens - r.cacheCreationTokens),
         p.inputCostPerMillion,
       ),
       b = cost(r.outputTokens, p.outputCostPerMillion),
-      c = cost(r.cacheReadTokens, p.cacheReadCostPerMillion);
+      c = cost(r.cacheReadTokens, p.cacheReadCostPerMillion),
+      d = cost(r.cacheCreationTokens, p.cacheCreationCostPerMillion);
     return {
       ...r,
       inputCostUsd: a,
       outputCostUsd: b,
       cacheReadCostUsd: c,
-      cacheCreationCostUsd: "0",
-      totalCostUsd: (Number(a) + Number(b) + Number(c)).toFixed(8),
+      cacheCreationCostUsd: d,
+      totalCostUsd: (Number(a) + Number(b) + Number(c) + Number(d)).toFixed(8),
     };
   });
 }
@@ -205,9 +235,11 @@ const total = (rows: RequestLog[]) =>
       totalRequests: s.totalRequests + 1,
       totalCost: String(Number(s.totalCost) + Number(r.totalCostUsd || 0)),
       totalInputTokens:
-        s.totalInputTokens + Math.max(0, r.inputTokens - r.cacheReadTokens),
+        s.totalInputTokens +
+        Math.max(0, r.inputTokens - r.cacheReadTokens - r.cacheCreationTokens),
       totalOutputTokens: s.totalOutputTokens + r.outputTokens,
-      totalCacheCreationTokens: 0,
+      totalCacheCreationTokens:
+        s.totalCacheCreationTokens + r.cacheCreationTokens,
       totalCacheReadTokens: s.totalCacheReadTokens + r.cacheReadTokens,
       successRate: 0,
       realTotalTokens: s.realTotalTokens + r.inputTokens + r.outputTokens,
@@ -228,7 +260,9 @@ const total = (rows: RequestLog[]) =>
 function summary(rows: RequestLog[]) {
   const s = total(rows);
   s.cacheHitRate =
-    s.totalCacheReadTokens / (s.totalInputTokens + s.totalCacheReadTokens || 1);
+    s.totalCacheReadTokens /
+    (s.totalInputTokens + s.totalCacheReadTokens + s.totalCacheCreationTokens ||
+      1);
   if (rows.some((r) => !r.totalCostUsd)) s.totalCost = "";
   return s;
 }
@@ -475,8 +509,10 @@ export async function androidCommand(
       ];
     if (command === "get_session_usage_summary")
       return summary(
-        rows.filter((r) =>
-          r.requestId.startsWith("codex:" + args.sessionId + ":"),
+        rows.filter(
+          (r) =>
+            r.sessionId === args.sessionId ||
+            r.requestId.startsWith("codex:" + args.sessionId + ":"),
         ),
       );
     const groups = new Map<string, RequestLog[]>();
@@ -513,6 +549,7 @@ export async function androidCommand(
               totalTokens: s.realTotalTokens,
               totalCost: s.totalCost,
               successRate: 0,
+              successRateKnown: false,
               avgLatencyMs: 0,
               avgCostPerRequest: s.totalCost
                 ? String(Number(s.totalCost) / items.length)

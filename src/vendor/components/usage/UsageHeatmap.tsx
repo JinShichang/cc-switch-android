@@ -38,7 +38,7 @@ interface DayCell {
   hitRate: number | null;
   tokens: number;
   requests: number;
-  cost: number;
+  cost: number | null;
   future: boolean;
 }
 
@@ -49,7 +49,7 @@ interface SpanGrid {
   end: Date;
   weeks: DayCell[][];
   monthLabels: (number | null)[];
-  totals: { tokens: number; requests: number; cost: number };
+  totals: { tokens: number; requests: number; cost: number | null };
 }
 
 interface HoverState {
@@ -210,7 +210,7 @@ function buildSpan(
   const start = spanStart(today, index);
   const end = index === 0 ? today : addDays(spanStart(today, index - 1), -1);
   const weeks: DayCell[][] = [];
-  const totals = { tokens: 0, requests: 0, cost: 0 };
+  const totals: SpanGrid["totals"] = { tokens: 0, requests: 0, cost: 0 };
   for (let w = 0; w < WEEKS; w++) {
     const column: DayCell[] = [];
     for (let d = 0; d < 7; d++) {
@@ -223,12 +223,15 @@ function buildSpan(
         hitRate: stat ? hitRateOf(stat) : null,
         tokens: stat ? metricValue(stat, "tokens") : 0,
         requests: stat?.requestCount ?? 0,
-        cost: stat ? metricValue(stat, "cost") : 0,
+        cost: stat ? parseFiniteNumber(stat.totalCost) : 0,
         future: date.getTime() > today.getTime(),
       };
       totals.tokens += cell.tokens;
       totals.requests += cell.requests;
-      totals.cost += cell.cost;
+      totals.cost =
+        totals.cost === null || cell.cost === null
+          ? null
+          : totals.cost + cell.cost;
       column.push(cell);
     }
     weeks.push(column);
@@ -350,7 +353,10 @@ export function UsageHeatmap({
                 {t("usage.heatmap.spanSummary", {
                   tokens: formatTokensShort(span.totals.tokens, language),
                   requests: formatTokensShort(span.totals.requests, language),
-                  cost: money(span.totals.cost, 2),
+                  cost:
+                    span.totals.cost === null
+                      ? "—"
+                      : money(span.totals.cost, 2),
                 })}
               </span>
             </div>

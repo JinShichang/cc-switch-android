@@ -57,7 +57,11 @@ export function ProviderEditor({
       settingsConfig: JSON.stringify(provider.settingsConfig),
     },
   });
-  const [meta, setMeta] = useState<Record<string, any>>({ ...provider.meta });
+  const [meta, setMeta] = useState<Record<string, any>>(() => {
+    const next = { ...provider.meta };
+    delete next.androidLoginPolicy;
+    return next;
+  });
   const change = (key: string, value: unknown) =>
     setMeta((prev) => ({ ...prev, [key]: value }));
   const [filter, setFilter] = useState(provider.historyFilter === true),
@@ -146,7 +150,6 @@ export function ProviderEditor({
         validateProvider({
           ...provider,
           ...form.getValues(),
-          loginPolicy: meta.androidLoginPolicy ?? provider.loginPolicy,
           settingsConfig: {
             auth,
             config: c.codexConfig,
@@ -311,18 +314,6 @@ export function ProviderEditor({
             bearer token，保留 Codex 的 auth.json
             和钥匙串登录材料。其他本地代理参数需要启用中转；协议转换尚未移植的选项会在应用时明确报错。
           </p>
-          <label className="block text-body">
-            保留官方登录界面
-            <select
-              className="mt-2 block w-full border rounded-control p-2 bg-surface"
-              value={meta.androidLoginPolicy ?? provider.loginPolicy}
-              onChange={(e) => change("androidLoginPolicy", e.target.value)}
-            >
-              <option value="auto">自动</option>
-              <option value="keep">启用（已在 Codex 中登录）</option>
-              <option value="omit">关闭</option>
-            </select>
-          </label>
           {(error || saveError) && (
             <p role="alert" className="text-danger-text break-words">
               {error || saveError}

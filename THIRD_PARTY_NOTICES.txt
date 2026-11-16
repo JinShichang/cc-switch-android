@@ -1,7 +1,7 @@
 CC Switch Android — third-party notices
 
 Upstream CC Switch 4.0.33, commit fc3eb797c72e054d554eea6a2e7a8b93933c6ac5.
-Copied/adapted: complete Codex custom form components, model catalog templates, session manager and transcript reader, usage dashboard/charts/tables/pricing, Sidebar, AppPageHeader, UI controls, PromptListItem, Chinese locale, stylesheet, icons, Codex template and text normalization. Codex configuration projection semantics ported from Rust.
+Copied/adapted: complete Codex custom form components, model catalog templates, session manager and transcript reader, usage dashboard/charts/tables/pricing, Sidebar, AppPageHeader, UI controls, PromptListItem, Chinese locale, stylesheet, icons, Codex template and text normalization. Codex configuration projection and source-aware session usage semantics ported from Rust (services/session_usage_codex.rs and codex_rollout_file.rs).
 
 MIT License
 

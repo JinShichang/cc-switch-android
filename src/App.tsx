@@ -1913,7 +1913,7 @@ export function App() {
                     <img src={logo} width={42} height={42} alt="CC Switch" />
                     <div>
                       <strong>CC Switch</strong>
-                      <p className="muted">0.3.0 · Android · Codex</p>
+                      <p className="muted">0.3.1 · Android · Codex</p>
                     </div>
                   </div>
                   <p className="muted">

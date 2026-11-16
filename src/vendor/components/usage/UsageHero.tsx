@@ -65,7 +65,9 @@ export function aggregateSummaries(items: UsageSummary[]): UsageSummary {
   const cacheableInput = input + cacheCreation + cacheRead;
   return {
     totalRequests,
-    totalCost: items.some(s=>s.totalCost === "") ? "" : totalCostNum.toFixed(6),
+    totalCost: items.some((s) => s.totalCost === "")
+      ? ""
+      : totalCostNum.toFixed(6),
     totalInputTokens: input,
     totalOutputTokens: output,
     totalCacheCreationTokens: cacheCreation,

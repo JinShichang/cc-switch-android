@@ -48,6 +48,7 @@ test("usage record is not double counted, zero-last compaction is retained", () 
   const usage = { input_tokens: 20, output_tokens: 5 };
   const rows = sessionUsage(
     data([
+      event("session_meta", { id: "fixture" }),
       event("token_usage_record", { response_id: "r", token_usage: usage }),
       event("event_msg", {
         type: "token_count",
@@ -58,6 +59,7 @@ test("usage record is not double counted, zero-last compaction is retained", () 
   assert.equal(rows.length, 1);
   const other = sessionUsage(
     data([
+      event("session_meta", { id: "fixture" }),
       event("token_usage_record", { response_id: "r", token_usage: usage }),
       event("event_msg", {
         type: "token_count",
@@ -67,17 +69,26 @@ test("usage record is not double counted, zero-last compaction is retained", () 
   );
   assert.equal(other.rows.length, 1);
 });
-test("inherited and incomplete histories are deferred instead of billed twice", () => {
+test("inherited histories without a verified boundary are deferred instead of billed twice", () => {
   for (const meta of [
     { forked_from_id: "parent" },
     { parent_thread_id: "parent" },
     { history_base_thread_id: "parent" },
   ])
     assert.equal(
-      sessionUsage(data([event("session_meta", meta)])).deferred,
+      sessionUsage(
+        data([
+          event("session_meta", meta),
+          event("token_usage_record", {
+            usage: { input_tokens: 10, output_tokens: 1 },
+          }),
+        ]),
+      ).deferred,
       true,
     );
-  assert.equal(sessionUsage({ ...data([]), truncated: true }).deferred, true);
+  const prefix = sessionUsage({ ...data([]), truncated: true });
+  assert.equal(prefix.deferred, false);
+  assert.equal(prefix.partial, true);
 });
 test("reader retains tool pairing, thinking and event data", () => {
   const file = data([
@@ -230,4 +241,325 @@ test("filter rejects environment-derived headers instead of silently dropping th
   p.settingsConfig.config =
     'model_provider="vendor"\nmodel="fixture"\n[model_providers.vendor]\nbase_url="https://example.invalid/v1"\nenv_http_headers={X_Custom="HOST_HEADER"}\n';
   assert.throws(() => filterRouteSettings(p), /环境变量/);
+});
+
+test("partial tails and malformed unrelated lines retain complete response records", () => {
+  const usage = {
+    input_tokens: 120,
+    output_tokens: 12,
+    cached_input_tokens: 60,
+  };
+  const file = data([
+    event("session_meta", { id: "prefix", model_provider: "fixture" }),
+    event("turn_context", { model: "model-a" }),
+    event("token_usage_record", { response_id: "response", usage }),
+    event("event_msg", {
+      type: "token_count",
+      info: { total_token_usage: usage, last_token_usage: usage },
+    }),
+  ]);
+  for (const boundary of [
+    { incompleteTail: true },
+    { truncated: true },
+    { invalidLines: 1 },
+  ]) {
+    const result = sessionUsage({ ...file, ...boundary });
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows[0].inputTokens, 120);
+    assert.equal(result.partial, true);
+    assert.equal(result.deferred, false);
+  }
+});
+
+test("native usage records retain their own models and never sum cumulative turn counters", () => {
+  const a = { input_tokens: 30, output_tokens: 3 };
+  const b = { input_tokens: 40, output_tokens: 4 };
+  const result = sessionUsage(
+    data([
+      event("session_meta", { id: "native" }),
+      event("turn_context", { model: "first", turn_id: "a" }),
+      event("token_usage_record", {
+        response_id: "r-a",
+        usage: a,
+        turn_token_usage: { input_tokens: 3000 },
+      }),
+      event("turn_context", { model: "second", turn_id: "b" }),
+      event("token_usage_record", {
+        response_id: "r-b",
+        usage: b,
+        turn_token_usage: { input_tokens: 7000 },
+      }),
+      event("token_usage_record", { response_id: "r-b", usage: b }),
+    ]),
+  );
+  assert.equal(result.rows.length, 2);
+  assert.deepEqual(
+    result.rows.map((r) => r.model),
+    ["first", "second"],
+  );
+  assert.equal(
+    result.rows.reduce((n, r) => n + r.inputTokens, 0),
+    70,
+  );
+});
+
+test("cumulative counters resume after compaction instead of being suppressed by a global seen set", () => {
+  const counts = { input_tokens: 100, output_tokens: 10 };
+  const result = sessionUsage(
+    data([
+      event("session_meta", { id: "reset" }),
+      event("event_msg", {
+        type: "token_count",
+        info: { total_token_usage: counts, last_token_usage: counts },
+      }),
+      event("event_msg", {
+        type: "token_count",
+        info: { total_token_usage: counts, last_token_usage: counts },
+      }),
+      event("compacted", {}),
+      event("event_msg", {
+        type: "token_count",
+        info: { total_token_usage: counts, last_token_usage: counts },
+      }),
+    ]),
+  );
+  assert.equal(result.rows.length, 2);
+});
+
+test("verified post-fork ordinals admit only local response usage", () => {
+  const result = sessionUsage(
+    data([
+      {
+        ...event("session_meta", {
+          id: "child",
+          forked_from_id: "parent",
+          forked_from_ordinal_exclusive: 100,
+        }),
+        ordinal: 100,
+        timestamp: "2026-11-16T05:00:00Z",
+      },
+      event("token_usage_record", {
+        response_id: "r-child",
+        usage: { input_tokens: 20, output_tokens: 2 },
+      }),
+    ]),
+  );
+  assert.equal(result.deferred, false);
+  assert.equal(result.rows.length, 1);
+});
+
+test("subagent metadata alone does not imply copied history", () => {
+  const file = data([
+    event("session_meta", { id: "subagent", source: { subagent: "review" } }),
+    event("token_usage_record", {
+      response_id: "review",
+      usage: { input_tokens: 7, output_tokens: 1 },
+    }),
+  ]);
+  assert.equal(sessionUsage(file).rows.length, 1);
+});
+
+test("cumulative counters with malformed gaps defer instead of inventing a baseline", () => {
+  const result = sessionUsage({
+    ...data([
+      event("session_meta", { id: "gap" }),
+      event("event_msg", {
+        type: "token_count",
+        info: { total_token_usage: { input_tokens: 100, output_tokens: 5 } },
+      }),
+      event("event_msg", {
+        type: "token_count",
+        info: { total_token_usage: { input_tokens: 120, output_tokens: 8 } },
+      }),
+    ]),
+    invalidLines: 1,
+  });
+  assert.equal(result.rows.length, 0);
+  assert.equal(result.deferred, true);
+  assert.equal(result.partial, true);
+});
+
+test("cumulative-only complete records use the previous snapshot as a baseline", () => {
+  const result = sessionUsage(
+    data([
+      event("session_meta", { id: "cumulative" }),
+      event("event_msg", {
+        type: "token_count",
+        info: { total_token_usage: { input_tokens: 100, output_tokens: 5 } },
+      }),
+      event("event_msg", {
+        type: "token_count",
+        info: { total_token_usage: { input_tokens: 120, output_tokens: 8 } },
+      }),
+    ]),
+  );
+  assert.equal(result.rows.length, 2);
+  assert.deepEqual(
+    result.rows.map((r) => r.inputTokens),
+    [100, 20],
+  );
+});
+
+test("upstream source-aware deduplication ignores stale repeats within each rate-limit lane", () => {
+  const a = { input_tokens: 100, output_tokens: 10 },
+    b = { input_tokens: 200, output_tokens: 20 };
+  const msg = (source: string, value: any) =>
+    event("event_msg", {
+      type: "token_count",
+      rate_limits: { limit_id: source },
+      info: {
+        total_token_usage: value,
+        last_token_usage: { input_tokens: 100, output_tokens: 10 },
+      },
+    });
+  const result = sessionUsage(
+    data([
+      event("session_meta", { id: "sources" }),
+      msg("a", a),
+      msg("b", b),
+      msg("a", a),
+      msg("c", b),
+    ]),
+  );
+  assert.equal(result.rows.length, 3);
+  assert.equal(
+    result.rows.reduce((sum, row) => sum + row.inputTokens, 0),
+    300,
+  );
+});
+
+test("same-thread continuation with exact per-request usage is not deferred as a fork", () => {
+  const id = "11111111-1111-4111-8111-111111111111",
+    page = "22222222-2222-4222-8222-222222222222";
+  const result = sessionUsage({
+    ...data([
+      event("session_meta", {
+        id,
+        forked_from_id: "33333333-3333-4333-8333-333333333333",
+        history_mode: "paginated",
+        history_base: { thread_id: id },
+      }),
+      event("event_msg", {
+        type: "token_count",
+        info: {
+          total_token_usage: { input_tokens: 10000, output_tokens: 500 },
+          last_token_usage: { input_tokens: 100, output_tokens: 5 },
+        },
+      }),
+    ]),
+    path: `sessions/rollout-2026-11-16T06-00-00-${id}_${page}.jsonl`,
+  });
+  assert.equal(result.deferred, false);
+  assert.equal(result.rows[0].inputTokens, 100);
+  assert.ok(result.rows[0].requestId.includes(page));
+  assert.equal(result.rows[0].sessionId, id);
+});
+
+test("parent replay resolution removes copied token snapshots and keeps only child requests", async () => {
+  const { resolveUsageFiles } = await import("../src/upstream/codexUsage.ts");
+  const count = (n: number, stamp: string) => ({
+    ...event("event_msg", {
+      type: "token_count",
+      info: {
+        total_token_usage: { input_tokens: n, output_tokens: n / 10 },
+        last_token_usage: { input_tokens: 100, output_tokens: 10 },
+      },
+    }),
+    timestamp: stamp,
+  });
+  const parent = sessionUsage(
+    data([
+      {
+        ...event("session_meta", { id: "parent" }),
+        timestamp: "2026-11-16T04:00:00Z",
+      },
+      count(100, "2026-11-16T04:01:00Z"),
+      {
+        ...event("response_item", { type: "message" }),
+        timestamp: "2026-11-16T05:00:00Z",
+      },
+    ]),
+  );
+  const child = sessionUsage({
+    ...data([
+      {
+        ...event("session_meta", { id: "child", forked_from_id: "parent" }),
+        timestamp: "2026-11-16T05:00:00Z",
+      },
+      count(100, "2026-11-16T04:01:00Z"),
+      count(200, "2026-11-16T06:00:00Z"),
+    ]),
+    path: "sessions/child.jsonl",
+  });
+  assert.equal(child.deferred, true);
+  const resolved = resolveUsageFiles([parent, child])[1];
+  assert.equal(resolved.deferred, false);
+  assert.equal(resolved.rows.length, 1);
+  assert.equal(
+    resolved.rows[0].createdAt,
+    Date.parse("2026-11-16T06:00:00Z") / 1000,
+  );
+});
+
+test("conflicting parent copies keep fork usage deferred", async () => {
+  const { resolveUsageFiles } = await import("../src/upstream/codexUsage.ts");
+  const meta = {
+    ...event("session_meta", { id: "parent" }),
+    timestamp: "2026-11-16T04:00:00Z",
+  };
+  const item = (n: number) => ({
+    ...event("event_msg", {
+      type: "token_count",
+      info: {
+        total_token_usage: { input_tokens: n, output_tokens: 1 },
+        last_token_usage: { input_tokens: n, output_tokens: 1 },
+      },
+    }),
+    timestamp: "2026-11-16T04:01:00Z",
+  });
+  const finish = {
+    ...event("response_item", {}),
+    timestamp: "2026-11-16T06:00:00Z",
+  };
+  const a = sessionUsage({
+    ...data([meta, item(10), finish]),
+    path: "sessions/parent.jsonl",
+  });
+  const b = sessionUsage({
+    ...data([meta, item(20), finish]),
+    path: "archived_sessions/parent.jsonl",
+  });
+  const c = sessionUsage({
+    ...data([
+      {
+        ...event("session_meta", { id: "child", forked_from_id: "parent" }),
+        timestamp: "2026-11-16T05:00:00Z",
+      },
+      item(10),
+    ]),
+    path: "sessions/child.jsonl",
+  });
+  assert.equal(resolveUsageFiles([a, b, c])[2].deferred, true);
+});
+
+test("usage models normalize provider prefixes and dated aliases while retaining request names", () => {
+  const result = sessionUsage(
+    data([
+      event("session_meta", { id: "names" }),
+      event("turn_context", { model: "OpenAI/GPT-5.6-SOL-2026-11-16" }),
+      event("token_usage_record", {
+        usage: { input_tokens: 20, output_tokens: 2 },
+      }),
+    ]),
+  );
+  assert.equal(result.rows[0].model, "gpt-5.6-sol");
+  assert.equal(result.rows[0].requestModel, "OpenAI/GPT-5.6-SOL-2026-11-16");
+});
+
+test("metadata-only inherited files are empty rather than failed usage imports", () => {
+  const parsed = sessionUsage(
+    data([event("session_meta", { id: "empty", forked_from_id: "parent" })]),
+  );
+  assert.equal(parsed.deferred, false);
+  assert.equal(parsed.rows.length, 0);
 });

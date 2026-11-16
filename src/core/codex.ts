@@ -297,10 +297,7 @@ export function projection(
   }
   const ownCredential =
     provider.authKind === "apiKey" || provider.authKind === "env";
-  route.requires_openai_auth =
-    ownCredential &&
-    (provider.loginPolicy === "keep" ||
-      (provider.loginPolicy === "auto" && !!liveAuth?.fileLogin));
+  route.requires_openai_auth = ownCredential && !!liveAuth?.fileLogin;
   return { official, route, top, extra, authKind: provider.authKind };
 }
 
@@ -351,14 +348,13 @@ export function validateProvider(value: unknown): Provider {
     historyFilter: value.historyFilter === true,
     category: authKind === "official" ? "official" : "custom",
     authKind,
-    loginPolicy: ["auto", "keep", "omit"].includes(value.loginPolicy)
-      ? value.loginPolicy
-      : "auto",
     notes: string(value.notes).slice(0, 2000),
     createdAt:
       typeof value.createdAt === "number" ? value.createdAt : Date.now(),
     updatedAt: Date.now(),
   };
+  // Remove the obsolete Android-only selector from older saves and imports.
+  delete result.meta?.androidLoginPolicy;
   if (result.settingsConfig.modelCatalog) {
     const models = result.settingsConfig.modelCatalog.models;
     if (
@@ -392,7 +388,6 @@ export function newProvider(kind: AuthKind = "apiKey"): Provider {
     settingsConfig: template,
     category: kind === "official" ? "official" : "custom",
     authKind: kind,
-    loginPolicy: "auto",
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -460,14 +455,6 @@ export function planApply(snapshot: Snapshot, provider: Provider): ApplyPlan {
   if (provider.authKind === "env")
     warnings.push(
       "CC Switch 无法设置或验证 Codex 进程的环境变量，请在 Codex 宿主确认该变量已注入。",
-    );
-  if (
-    provider.loginPolicy === "keep" &&
-    !summary.auth.fileLogin &&
-    !target.official
-  )
-    warnings.push(
-      "已启用保留官方登录界面；若 Codex 卡在登录页，请将此方案改为“自动”或“关闭”。",
     );
   if (provider.historyFilter)
     warnings.push(
@@ -714,7 +701,6 @@ export function captureCurrent(snapshot: Snapshot, name: string): Provider {
     config: stringify(template),
     auth: key ? { OPENAI_API_KEY: key } : {},
   };
-  provider.loginPolicy = table?.requires_openai_auth === true ? "keep" : "auto";
   return validateProvider(provider);
 }
 

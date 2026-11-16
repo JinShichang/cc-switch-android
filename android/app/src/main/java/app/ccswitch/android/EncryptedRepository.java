@@ -60,6 +60,16 @@ final class EncryptedRepository {
             next.getJSONObject("settings").put("zoom", 100);
             next.put("schemaVersion", 3); changed = true;
         }
+        if (data.optInt("schemaVersion", 1) < 4) {
+            JSONArray providers = next.getJSONArray("providers");
+            for (int i = 0; i < providers.length(); i++) {
+                JSONObject provider = providers.getJSONObject(i);
+                provider.remove("loginPolicy");
+                JSONObject meta = provider.optJSONObject("meta");
+                if (meta != null) meta.remove("androidLoginPolicy");
+            }
+            next.put("schemaVersion", 4); changed = true;
+        }
         for (String key : new String[] { "prompts", "documentBackups" }) if (!next.has(key)) { next.put(key, new JSONArray()); changed = true; }
         if (!next.has("documentJournals")) { next.put("documentJournals", new JSONObject()); changed = true; }
         if (changed) replace(next);

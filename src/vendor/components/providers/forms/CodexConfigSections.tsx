@@ -72,6 +72,8 @@ export const CodexAuthSection: React.FC<CodexAuthSectionProps> = ({
       </label>
 
       <JsonEditor
+        id="codexAuth"
+        ariaLabel="auth.json"
         value={value}
         onChange={handleChange}
         placeholder={t("codexConfig.authJsonPlaceholder")}
@@ -302,13 +304,16 @@ export const CodexConfigSection: React.FC<CodexConfigSectionProps> = ({
       </div>
 
       <JsonEditor
+        id="codexConfig"
+        ariaLabel="config.toml"
         value={localValue}
         onChange={handleLocalChange}
         placeholder=""
         darkMode={isDarkMode}
-        rows={3}
-        showValidation={false}
-        language="javascript"
+        rows={18}
+        height="clamp(320px, 60vh, 640px)"
+        showValidation={true}
+        language="toml"
       />
 
       <InactiveFieldsPanel

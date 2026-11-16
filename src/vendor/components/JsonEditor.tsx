@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useMemo } from "react";
 import { EditorView, basicSetup } from "codemirror";
 import { json } from "@codemirror/lang-json";
 import { javascript } from "@codemirror/lang-javascript";
+import { tomlLanguage } from "../../android/tomlLanguage";
+import { parseConfig } from "../../core/tomlPatch";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { Annotation, EditorSelection, EditorState } from "@codemirror/state";
 import { placeholder } from "@codemirror/view";
@@ -23,7 +25,7 @@ interface JsonEditorProps {
   darkMode?: boolean;
   rows?: number;
   showValidation?: boolean;
-  language?: "json" | "javascript";
+  language?: "json" | "javascript" | "toml";
   height?: string | number;
   showMinimap?: boolean; // 添加此属性以防未来使用
   readOnly?: boolean;
@@ -112,12 +114,16 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
     () =>
       linter((view) => {
         const diagnostics: Diagnostic[] = [];
-        if (!showValidation || language !== "json") return diagnostics;
+        if (!showValidation || language === "javascript") return diagnostics;
 
         const doc = view.state.doc.toString();
         if (!doc.trim()) return diagnostics;
 
         try {
+          if (language === "toml") {
+            parseConfig(doc);
+            return diagnostics;
+          }
           const parsed = JSON.parse(doc);
           // 检查是否是JSON对象
           if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -133,7 +139,11 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
         } catch (e) {
           // 简单处理JSON解析错误
           const message =
-            e instanceof SyntaxError ? e.message : t("jsonEditor.invalidJson");
+            language === "toml" && e instanceof Error
+              ? e.message
+              : e instanceof SyntaxError
+                ? e.message
+                : t("jsonEditor.invalidJson");
           diagnostics.push({
             from: 0,
             to: doc.length,
@@ -188,20 +198,41 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
 
     // 使用 theme 定义尺寸和字体样式
     const sizingTheme = EditorView.theme({
-      "&": hasExplicitHeight
-        ? { height: "100%" }
-        : { minHeight: `${minHeightPx}px` },
-      ".cm-scroller": { overflow: "auto" },
-      ".cm-content": {
+      "&": {
+        ...(hasExplicitHeight
+          ? { height: "100%" }
+          : { minHeight: `${minHeightPx}px` }),
+        maxWidth: "100%",
+        overflow: "hidden",
+        border: "1px solid var(--border-strong)",
+        borderRadius: "0.5rem",
+        backgroundColor: "var(--bg-card)",
+        color: "var(--text-1)",
+      },
+      "&.cm-focused": { outline: "none", borderColor: "hsl(var(--primary))" },
+      ".cm-scroller": {
+        overflow: "auto",
         fontFamily:
-          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
         fontSize: "14px",
+        lineHeight: "1.6",
+      },
+      ".cm-content": { minWidth: "0", caretColor: "var(--text-1)" },
+      ".cm-gutters": {
+        backgroundColor: "var(--bg-card)",
+        color: "var(--text-2)",
+        borderRight: "1px solid var(--border-strong)",
       },
     });
 
     const extensions = [
       basicSetup,
-      language === "javascript" ? javascript() : json(),
+      language === "toml"
+        ? tomlLanguage
+        : language === "javascript"
+          ? javascript()
+          : json(),
+      ...(language === "toml" ? [EditorView.lineWrapping] : []),
       placeholder(placeholderText || ""),
       baseTheme,
       sizingTheme,
@@ -230,12 +261,13 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
       // 在 oneDark 之后强制覆盖边框样式
       extensions.push(
         EditorView.theme({
-          ".cm-editor": {
+          "&": {
+            color: "var(--text-1)",
             border: "1px solid hsl(var(--border))",
             borderRadius: "0.5rem",
             background: "transparent",
           },
-          ".cm-editor.cm-focused": {
+          "&.cm-focused": {
             outline: "none",
             borderColor: "hsl(var(--primary))",
           },
@@ -243,7 +275,7 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
             background: "transparent",
           },
           ".cm-gutters": {
-            background: "transparent",
+            background: "var(--bg-card)",
             borderRight: "1px solid hsl(var(--border))",
             color: "hsl(var(--muted-foreground))",
           },
@@ -276,9 +308,18 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
     });
 
     viewRef.current = view;
+    // Re-measure when a long mobile panel scrolls into view or the keyboard changes its size.
+    const resizeObserver = new ResizeObserver(() => view.requestMeasure());
+    const intersectionObserver = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) view.requestMeasure();
+    });
+    resizeObserver.observe(editorRef.current);
+    intersectionObserver.observe(editorRef.current);
 
     // 清理函数
     return () => {
+      resizeObserver.disconnect();
+      intersectionObserver.disconnect();
       view.destroy();
       viewRef.current = null;
     };

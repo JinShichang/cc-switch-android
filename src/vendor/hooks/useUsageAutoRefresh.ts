@@ -34,12 +34,18 @@ export function useUsageAutoRefresh({
   // 手动同步复用尚未完成的静默扫描；慢扫描不会在后端互斥锁前排队累积。
   const syncSessionUsage = useCallback(() => {
     if (!pendingSync.current) {
-      pendingSync.current = usageApi.syncSessionUsage().finally(() => {
-        pendingSync.current = null;
-      });
+      pendingSync.current = usageApi
+        .syncSessionUsage()
+        .then(async (result) => {
+          await queryClient.invalidateQueries({ queryKey: usageKeys.all });
+          return result;
+        })
+        .finally(() => {
+          pendingSync.current = null;
+        });
     }
     return pendingSync.current;
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     if (!sessionAutoSyncEnabled || refreshIntervalMs <= 0 || paused) return;

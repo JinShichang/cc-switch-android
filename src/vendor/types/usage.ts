@@ -9,6 +9,7 @@ export interface TokenUsage {
 
 export interface RequestLog {
   requestId: string;
+  sessionId?: string;
   providerId: string;
   providerName?: string;
   appType: string;
@@ -43,6 +44,8 @@ export interface SessionSyncResult {
   filesScanned: number;
   suspectedDuplicates: number;
   deferredFiles: number;
+  partialFiles?: number;
+  filesWithoutUsage?: number;
   errors: string[];
 }
 
@@ -121,6 +124,7 @@ export interface ProviderStats {
   totalTokens: number;
   totalCost: string;
   successRate: number;
+  successRateKnown?: boolean;
   avgLatencyMs: number;
   /** 速度分子：有首字、输出 ≥ 100 token 的明细请求的输出之和（日汇总不计） */
   speedOutputTokens?: number;
@@ -144,6 +148,7 @@ export interface ModelStats {
   totalCost: string;
   avgCostPerRequest: string;
   successRate: number;
+  successRateKnown?: boolean;
   /** 速度分子分母，口径同 ProviderStats 的四个速度字段 */
   speedOutputTokens?: number;
   speedGenerationMs?: number;

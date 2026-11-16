@@ -1,5 +1,4 @@
 export type AuthKind = "apiKey" | "official" | "env" | "none";
-export type LoginPolicy = "auto" | "keep" | "omit";
 export type TomlObject = Record<string, any>;
 
 /** Same settingsConfig shape as upstream CC Switch's Codex Provider. */
@@ -22,7 +21,6 @@ export interface Provider {
   historyFilter?: boolean;
   category: "custom" | "official";
   authKind: AuthKind;
-  loginPolicy: LoginPolicy;
   notes?: string;
   createdAt: number;
   updatedAt: number;

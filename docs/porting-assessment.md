@@ -47,3 +47,9 @@
 
 ## 0.3.0 更新
 完整 CodexFormFields、CodexConfigSections、BasicFormFields、SessionManagerPage/reader、UsageDashboard 和相关图表表格已直接复制至 src/vendor，并经 src/android 适配层接入 SAF。避免重做精简页面。前台服务独立于 Activity；本机 socket 过滤语义参考用户提供的 agentrouter v2，Java 重新实现，未复制其源码。Android ARM64 zstd 使用官方 AAR，Brotli 使用官方 Java decoder。
+
+## 0.3.1 上游复用纠正
+
+Codex 自定义表单、会话和用量页面继续直接复用 src/vendor 组件。本轮改动只修正手机标签、CodeMirror 滚动/语法和浮层高度。此前 Android 用量适配过度简化，现从上游 services/session_usage_codex.rs 和 codex_rollout_file.rs 移植核心规则到 src/upstream/codexUsage.ts 与 SessionLogReader.java，保留 MIT 来源。SAF 负责文档流、Java 提供原始字节投影，TypeScript 实现统计纯逻辑。
+
+并非整个 Tauri 后端可原样运行：本地文件路径、桌面钥匙串、SQLite 事务和桌面 IPC 仍需 Android 实现。使用原组件不代表所有宿主功能已联调；父历史边界不可验证时明确暂缓，而不是假设或重复累计。

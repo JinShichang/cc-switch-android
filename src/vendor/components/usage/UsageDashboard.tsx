@@ -53,7 +53,10 @@ import { DEFAULT_VISIBLE_APPS } from "@/vendor/config/appConfig";
 import { useUsageEventBridge } from "@/vendor/hooks/useUsageEventBridge";
 import { useUsageAutoRefresh } from "@/vendor/hooks/useUsageAutoRefresh";
 import { usageApi } from "@/vendor/lib/api/usage";
-import { getUsageRangePresetLabel, resolveUsageRange } from "@/vendor/lib/usageRange";
+import {
+  getUsageRangePresetLabel,
+  resolveUsageRange,
+} from "@/vendor/lib/usageRange";
 import { cn } from "@/vendor/lib/utils";
 import { UsageHero } from "./UsageHero";
 import { UsageTrendChart } from "./UsageTrendChart";
@@ -398,7 +401,12 @@ export function UsageDashboard({
         suspected: result.suspectedDuplicates,
         deferred: result.deferredFiles,
       });
-      if (result.errors.length > 0 || result.deferredFiles > 0) {
+      if (
+        result.errors.length > 0 ||
+        result.deferredFiles > 0 ||
+        result.partialFiles ||
+        result.imported === 0
+      ) {
         toast.warning(message);
       } else {
         toast.success(message);
@@ -422,7 +430,12 @@ export function UsageDashboard({
         files: result.filesScanned,
         errors: result.errors.length,
       });
-      if (result.errors.length > 0) {
+      if (
+        result.errors.length > 0 ||
+        result.deferredFiles > 0 ||
+        result.partialFiles ||
+        result.imported === 0
+      ) {
         toast.warning(message);
       } else {
         toast.success(message);

@@ -9,6 +9,8 @@ export interface EventFile {
   events: any[];
   truncated: boolean;
   invalidLines: number;
+  incompleteTail?: boolean;
+  maxTimestamp?: number;
 }
 const text = (v: any): string =>
   typeof v === "string" ? v : JSON.stringify(v ?? "");
@@ -167,127 +169,4 @@ export function sessionMeta(
     resumeCommand: meta.id ? "codex resume " + meta.id : undefined,
   };
 }
-const count = (v: any) => (Number.isSafeInteger(v) && v >= 0 ? v : 0);
-function tokens(v: any) {
-  return {
-    input: count(v?.input_tokens),
-    cached: count(
-      v?.cached_input_tokens ?? v?.input_tokens_details?.cached_tokens,
-    ),
-    output: count(v?.output_tokens),
-  };
-}
-export function sessionUsage(data: EventFile): {
-  rows: RequestLog[];
-  deferred: boolean;
-} {
-  const meta =
-    data.events.find((e) => e.type === "session_meta")?.payload ?? {};
-  // Inherited histories need a verified parent baseline. Defer instead of billing them twice.
-  if (
-    meta.forked_from_id ||
-    meta.parent_thread_id ||
-    meta.history_base_thread_id ||
-    meta.source?.subagent ||
-    data.truncated ||
-    data.invalidLines
-  )
-    return { rows: [], deferred: true };
-  const rows: RequestLog[] = [],
-    seen = new Set<string>(),
-    recordIds = new Set<string>();
-  let high = { input: 0, cached: 0, output: 0 },
-    model = "未记录模型",
-    turn = "",
-    pending: any = null;
-  const add = (usage: ReturnType<typeof tokens>, e: any, index: number) => {
-    if (!usage.input && !usage.output) return;
-    rows.push({
-      requestId: "codex:" + String(meta.id ?? data.path) + ":" + index,
-      providerId: "codex-session",
-      providerName: meta.model_provider
-        ? String(meta.model_provider)
-        : "Codex（会话日志）",
-      appType: "codex",
-      model,
-      requestModel: model,
-      costMultiplier: "1",
-      inputTokens: usage.input,
-      outputTokens: usage.output,
-      cacheReadTokens: Math.min(usage.cached, usage.input),
-      cacheCreationTokens: 0,
-      inputCostUsd: "",
-      outputCostUsd: "",
-      cacheReadCostUsd: "",
-      cacheCreationCostUsd: "",
-      totalCostUsd: "",
-      isStreaming: false,
-      latencyMs: 0,
-      statusCode: 0,
-      createdAt: Math.floor(time(e.timestamp) / 1000),
-      dataSource: "session",
-      errorMessage:
-        "会话日志未记录 HTTP 状态与精确耗时；费用仅按设置的价格估算。",
-    });
-  };
-  data.events.forEach((e, index) => {
-    const p = e.payload ?? {};
-    if (e.type === "turn_context") {
-      model = p.model ?? model;
-      turn = p.turn_id ?? turn;
-      return;
-    }
-    if (p.type === "thread_settings_applied") {
-      model = p.thread_settings?.model ?? model;
-      return;
-    }
-    if (e.type === "token_usage_record") {
-      if (p.response_id && recordIds.has(p.response_id)) return;
-      if (pending) add(pending.value, pending.e, pending.index);
-      if (p.response_id) recordIds.add(p.response_id);
-      pending = {
-        value: tokens(p.token_usage ?? p.usage ?? p.turn_token_usage),
-        e,
-        index,
-      };
-      return;
-    }
-    if (e.type !== "event_msg" || p.type !== "token_count" || !p.info) return;
-    const info = p.info;
-    model = info.model ?? info.model_name ?? p.model ?? model;
-    const signature = JSON.stringify([
-      info.total_token_usage,
-      info.last_token_usage,
-    ]);
-    if (info.total_token_usage && seen.has(signature)) {
-      pending = null;
-      return;
-    }
-    if (info.total_token_usage) seen.add(signature);
-    const total = info.total_token_usage
-        ? tokens(info.total_token_usage)
-        : null,
-      last = info.last_token_usage ? tokens(info.last_token_usage) : null;
-    if (pending && last && !last.input && !last.output)
-      add(pending.value, pending.e, pending.index);
-    pending = null;
-    const value =
-      last ??
-      (total
-        ? {
-            input: Math.max(0, total.input - high.input),
-            cached: Math.max(0, total.cached - high.cached),
-            output: Math.max(0, total.output - high.output),
-          }
-        : null);
-    if (total)
-      high = {
-        input: Math.max(high.input, total.input),
-        cached: Math.max(high.cached, total.cached),
-        output: Math.max(high.output, total.output),
-      };
-    if (value) add(value, e, index);
-  });
-  if (pending) add(pending.value, pending.e, pending.index);
-  return { rows, deferred: false };
-}
+export { sessionUsage, resolveUsageFiles } from "../upstream/codexUsage.ts";

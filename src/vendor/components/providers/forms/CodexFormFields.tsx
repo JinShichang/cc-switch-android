@@ -467,11 +467,13 @@ export function formatReasoningLevelsLabel(levels: string[]): string {
 const AUTO_DEFAULT_REASONING_LEVEL = "__auto__";
 
 function ReasoningLevelsEditor({
+  id,
   levels,
   defaultLevel,
   onLevelsChange,
   onDefaultLevelChange,
 }: {
+  id?: string;
   levels?: string[];
   defaultLevel?: string;
   onLevelsChange: (levels: string[] | undefined) => void;
@@ -529,6 +531,10 @@ function ReasoningLevelsEditor({
           <button
             type="button"
             role="combobox"
+            id={id}
+            aria-label={t("codexConfig.catalogColumnReasoning", {
+              defaultValue: "思考等级",
+            })}
             aria-expanded={open}
             // 和同一行的 Input、Select 同一套外观，行高才对得齐。
             className={cn(
@@ -1786,80 +1792,127 @@ export function CodexFormFields({
                 id={row.rowId}
                 canDrag={catalogRows.length > 1}
               >
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_minmax(0,1fr)_36px]">
-                  <Input
-                    value={row.displayName ?? ""}
-                    onChange={(event) =>
-                      handleUpdateCatalogRow(index, {
-                        displayName: event.target.value,
-                      })
-                    }
-                    placeholder={t(
-                      "codexConfig.catalogDisplayNamePlaceholder",
-                      {
-                        defaultValue: "例如: DeepSeek V4 Flash",
-                      },
-                    )}
-                    aria-label={t("codexConfig.catalogColumnDisplay", {
-                      defaultValue: "菜单显示名",
-                    })}
-                  />
-                  <div className="flex gap-1">
+                <div className="catalog-model-grid grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_minmax(0,1fr)_36px]">
+                  <div className="catalog-model-field space-y-1">
+                    <label
+                      htmlFor={`codex-catalog-display-${row.rowId}`}
+                      className="block text-xs font-medium text-fg-2 md:hidden"
+                    >
+                      {t("codexConfig.catalogColumnDisplay", {
+                        defaultValue: "菜单显示名",
+                      })}
+                    </label>
                     <Input
-                      value={row.model}
+                      id={`codex-catalog-display-${row.rowId}`}
+                      value={row.displayName ?? ""}
                       onChange={(event) =>
                         handleUpdateCatalogRow(index, {
-                          model: event.target.value,
+                          displayName: event.target.value,
                         })
                       }
-                      placeholder={t("codexConfig.catalogModelPlaceholder", {
-                        defaultValue: "例如: deepseek-v4-flash",
+                      placeholder={t(
+                        "codexConfig.catalogDisplayNamePlaceholder",
+                        {
+                          defaultValue: "例如: DeepSeek V4 Flash",
+                        },
+                      )}
+                      aria-label={t("codexConfig.catalogColumnDisplay", {
+                        defaultValue: "菜单显示名",
                       })}
-                      aria-label={t("codexConfig.catalogColumnModel", {
+                    />
+                  </div>
+                  <div className="catalog-model-field space-y-1">
+                    <label
+                      htmlFor={`codex-catalog-model-${row.rowId}`}
+                      className="block text-xs font-medium text-fg-2 md:hidden"
+                    >
+                      {t("codexConfig.catalogColumnModel", {
                         defaultValue: "实际请求模型",
                       })}
-                      className="flex-1"
-                    />
-                    {fetchedModels.length > 0 && (
-                      <ModelDropdown
-                        models={fetchedModels}
-                        onSelect={(id) =>
-                          handleSelectFetchedCatalogModel(row.rowId, id)
+                    </label>
+                    <div className="flex gap-1">
+                      <Input
+                        id={`codex-catalog-model-${row.rowId}`}
+                        value={row.model}
+                        onChange={(event) =>
+                          handleUpdateCatalogRow(index, {
+                            model: event.target.value,
+                          })
                         }
+                        placeholder={t("codexConfig.catalogModelPlaceholder", {
+                          defaultValue: "例如: deepseek-v4-flash",
+                        })}
+                        aria-label={t("codexConfig.catalogColumnModel", {
+                          defaultValue: "实际请求模型",
+                        })}
+                        className="flex-1"
                       />
-                    )}
+                      {fetchedModels.length > 0 && (
+                        <ModelDropdown
+                          models={fetchedModels}
+                          onSelect={(id) =>
+                            handleSelectFetchedCatalogModel(row.rowId, id)
+                          }
+                        />
+                      )}
+                    </div>
                   </div>
-                  <Input
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    value={row.contextWindow ?? ""}
-                    onChange={(event) =>
-                      handleUpdateCatalogRow(index, {
-                        contextWindow: event.target.value.replace(/[^\d]/g, ""),
-                      })
-                    }
-                    placeholder={t("codexConfig.contextWindowPlaceholder", {
-                      defaultValue: "例如: 128000",
-                    })}
-                    aria-label={t("codexConfig.catalogColumnContext", {
-                      defaultValue: "上下文窗口",
-                    })}
-                  />
-                  <ReasoningLevelsEditor
-                    levels={row.reasoningLevels}
-                    defaultLevel={row.defaultReasoningLevel}
-                    onLevelsChange={(levels) =>
-                      handleUpdateCatalogRow(index, {
-                        reasoningLevels: levels,
-                      })
-                    }
-                    onDefaultLevelChange={(level) =>
-                      handleUpdateCatalogRow(index, {
-                        defaultReasoningLevel: level,
-                      })
-                    }
-                  />
+                  <div className="catalog-model-field space-y-1">
+                    <label
+                      htmlFor={`codex-catalog-context-${row.rowId}`}
+                      className="block text-xs font-medium text-fg-2 md:hidden"
+                    >
+                      {t("codexConfig.catalogColumnContext", {
+                        defaultValue: "上下文窗口",
+                      })}
+                    </label>
+                    <Input
+                      id={`codex-catalog-context-${row.rowId}`}
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      value={row.contextWindow ?? ""}
+                      onChange={(event) =>
+                        handleUpdateCatalogRow(index, {
+                          contextWindow: event.target.value.replace(
+                            /[^\d]/g,
+                            "",
+                          ),
+                        })
+                      }
+                      placeholder={t("codexConfig.contextWindowPlaceholder", {
+                        defaultValue: "例如: 128000",
+                      })}
+                      aria-label={t("codexConfig.catalogColumnContext", {
+                        defaultValue: "上下文窗口",
+                      })}
+                    />
+                  </div>
+                  <div className="catalog-model-field space-y-1">
+                    <label
+                      htmlFor={`codex-catalog-reasoning-${row.rowId}`}
+                      className="block text-xs font-medium text-fg-2 md:hidden"
+                    >
+                      {t("codexConfig.catalogColumnReasoning", {
+                        defaultValue: "思考等级",
+                      })}
+                    </label>
+                    <ReasoningLevelsEditor
+                      id={`codex-catalog-reasoning-${row.rowId}`}
+                      levels={row.reasoningLevels}
+                      defaultLevel={row.defaultReasoningLevel}
+                      onLevelsChange={(levels) =>
+                        handleUpdateCatalogRow(index, {
+                          reasoningLevels: levels,
+                        })
+                      }
+                      onDefaultLevelChange={(level) =>
+                        handleUpdateCatalogRow(index, {
+                          defaultReasoningLevel: level,
+                        })
+                      }
+                    />
+                  </div>
                   <HoverTip
                     content={t("common.delete", { defaultValue: "删除" })}
                   >

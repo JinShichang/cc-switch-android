@@ -326,7 +326,7 @@ test("environment-variable auth removes stale bearer and preserves variable name
 });
 
 test("no-auth service never requests official auth or includes a stale API key", () => {
-  const p = provider({ authKind: "none", loginPolicy: "keep" });
+  const p = provider({ authKind: "none" });
   const plan = planApply(
     snapshot(null, '{"tokens":{"access_token":"FAKE"}}'),
     p,
@@ -693,4 +693,29 @@ test("filtered route matching checks the recorded remote URL", () => {
   assert.equal(matchProvider(live, p), "exact");
   live.filteredRoutes.localtoken.baseUrl = "https://different.invalid/v1";
   assert.equal(matchProvider(live, p), "different");
+});
+
+test("legacy Android login selectors are discarded and never override auth compatibility", () => {
+  const old = {
+    ...provider(),
+    loginPolicy: "keep",
+    meta: { androidLoginPolicy: "keep", future: true },
+  };
+  const normalized = validateProvider(old);
+  assert.equal("loginPolicy" in normalized, false);
+  assert.equal(normalized.meta?.androidLoginPolicy, undefined);
+  assert.equal(normalized.meta?.future, true);
+  const noLogin = parseConfig(planApply(snapshot(null), normalized).config);
+  assert.equal(noLogin.model_providers.custom.requires_openai_auth, false);
+  const loggedIn = parseConfig(
+    planApply(
+      snapshot(null, '{"tokens":{"access_token":"FIXTURE_OAUTH"}}'),
+      normalized,
+    ).config,
+  );
+  assert.equal(loggedIn.model_providers.custom.requires_openai_auth, true);
+  assert.equal(
+    loggedIn.model_providers.custom.experimental_bearer_token,
+    "TEST_ONLY_KEY_123",
+  );
 });
