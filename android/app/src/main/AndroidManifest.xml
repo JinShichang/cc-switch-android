@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Used only to label the selected provider, never to find a filesystem. -->
-    <queries><package android:name="com.ai.codex" /></queries>
+    <queries>
+        <package android:name="com.ai.codex" />
+        <package android:name="com.android.documentsui" />
+        <package android:name="com.google.android.documentsui" />
+        <intent><action android:name="android.intent.action.OPEN_DOCUMENT_TREE" /></intent>
+        <intent><action android:name="android.intent.action.OPEN_DOCUMENT" /><category android:name="android.intent.category.OPENABLE" /><data android:mimeType="*/*" /></intent>
+        <intent><action android:name="android.intent.action.CREATE_DOCUMENT" /><category android:name="android.intent.category.OPENABLE" /><data android:mimeType="*/*" /></intent>
+    </queries>
     <!-- Configuration management needs no network or broad storage permission. -->
     <application
         android:label="CC Switch"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

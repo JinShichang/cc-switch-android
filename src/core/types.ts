@@ -54,6 +54,9 @@ export interface AppState {
   lastApplied?: { id: string; time: number; revision: string; treeUri: string };
   settings: { zoom: number; theme: "light" | "dark" | "system" };
   native: boolean;
+  prompts?: import("../lib/api").Prompt[];
+  documentBackups?: { id: string; createdAt: number; path: string; treeUri: string; reason: string }[];
+  pendingDocuments?: string[];
 }
 
 export interface ApplyPlan {

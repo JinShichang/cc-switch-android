@@ -1,7 +1,10 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
-import "./upstream/tokens.css";
+import "./i18n";
+import "./upstream/index.css";
+import { initializeInputModality } from "./lib/inputModality";
+initializeInputModality();
 import "./styles.css";
 
 class Boundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {

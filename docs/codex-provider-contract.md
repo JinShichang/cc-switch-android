@@ -1,6 +1,6 @@
 # 给 Codex Android 宿主的对接契约
 
-状态：2026-11-16，CC Switch Android 0.1.0 已实现 SAF 消费端。Codex 的 DocumentsProvider 由原会话实现，本工程未修改 Codex 源码，也尚未完成双方实机联调。
+状态：2026-11-16，CC Switch Android 0.2.0 已实现 SAF 消费端。当前本地 Codex 源码已包含 CodexDocumentsProvider（com.ai.codex.documents），由原会话负责。本工程未修改 Codex 源码；尚未确认用户手机是否安装对应版本，也尚未完成实机联调。
 
 ## 暴露目录
 
@@ -10,7 +10,7 @@
 - 安装 UUID、Debian 实际私有路径、用户 UID/GID 都由提供方定位和处理。CC Switch 不枚举 Codex 私有目录、不探测 UUID。
 - document ID 在同一次安装的应用重启、宿主重启、文件内容更新后应稳定。同一文件用临时文件替换后，逻辑 ID 也应继续可读。
 - 如果重装/重置导致目录身份变化，旧授权应明确失效并要求重新授权，不能把旧 URI 静默映射到另一个用户目录。
-- 宿主包名的 `com.ai.codex` 标识只用于界面标签。权限仍完全依赖用户选择的 URI grant；不是通过包名获得目录访问权。
+- 宿主包名 com.ai.codex 及 com.ai.codex.documents authority 用于检测已安装提供方和标注目录来源；选中此提供方时检查根显示名称为 .codex，拒绝子目录。权限仍完全依赖用户选择的 URI grant；不是通过包名获得目录访问权。
 
 ## 必需文档操作
 
@@ -32,7 +32,11 @@
 
 ## 文件范围
 
-CC Switch 首版仅读取 `config.toml`、`auth.json`，仅写入/必要时删除 `config.toml`。不会修改 AGENTS、MCP 目录、工作目录、会话、数据库、插件、技能、桌面内部状态等其他文件。
+0.2.0 读取 config.toml、auth.json、AGENTS.md、skills/**/SKILL.md、session_index.jsonl、sessions/**.jsonl、archived_sessions/**.jsonl。配置切换仅写 config.toml；用户在 MCP 页可显式修改选定 mcp_servers 项；提示词和用户技能页可写 AGENTS.md、skills/<一级用户目录>/SKILL.md。恢复可删除原本不存在的这些文件。不会修改 auth.json、钥匙串、会话日志、数据库或内置技能。
+
+子目录按每级 DISPLAY_NAME 查到 DOCUMENT_ID 后访问；不拼接 content URI 或私有文件路径。新增技能需要创建 skills 和用户子目录，目录 MIME 使用 DocumentsContract.Document.MIME_TYPE_DIR；Markdown 使用 text/plain MIME 并保持完整名称。列表使用 SIZE、LAST_MODIFIED 排序。文档备份和配置备份各最多10份，未确认 journal 独立保留。
+
+会话目录扫描最多5000项、显示最多150份日志（使用已扫描集合按修改时间排序），用量扫描最近最多50份。每份日志最多读取32MB / 100000行；单行512KB，返回最多2000事件 / 2MB；达到限制会显示不完整。名称索引上限2MB。
 
 配置投影拥有以下字段：
 
@@ -41,7 +45,7 @@ CC Switch 首版仅读取 `config.toml`、`auth.json`，仅写入/必要时删�
 - 方案显式提供时：`web_search`、`model_context_window`、`model_auto_compact_token_limit`、`model_supports_reasoning_summaries`、`model_verbosity`、指定的 agents/memories 模型字段。
 - 上游已废弃的 `disable_response_storage` 在应用时移除。
 
-MCP、项目、信任、工作目录、认证存储模式、其他 provider、模型目录指针及不相关字段保持不变。可选字段有写入前值和所有权记录；切走时只恢复未被外部修改过的值。
+切换供应商时 MCP、项目、信任、工作目录、认证存储模式、其他 provider、模型目录指针及不相关字段保持不变。可选字段有写入前值和所有权记录；切走时只恢复未被外部修改过的值。
 
 新 provider 统一写到 `[model_providers.custom]`，与当前上游一致。其他自定义表保留。当前 Codex 不接受的保留名称表会阻止应用并提示迁移，不被静默删除。
 

@@ -1,63 +1,44 @@
 # 验证记录
 
-日期：2026-11-16。版本：0.1.0，包名：`app.ccswitch.android`。
+日期：2026-11-16。版本0.2.0，包名 app.ccswitch.android。
 
 ## 已验证
 
-| 检查 | 结果 | 证据 |
-| --- | --- | --- |
-| TypeScript 类型检查 | 通过 | `npm run typecheck` 和 `npm run build` |
-| 配置保护/导入导出/认证规则 | 41 项通过，0 失败 | `tests/config.test.ts`；交付 `logs/build-20261116-132707.log` 包含测试结果 |
-| 原生事务故障注入 | 16 项通过，0 失败 | `tests/TransactionEngineTest.java`；同上日志 |
-| 前端正式资源打包 | 通过 | Vite 生产构建，主 JS 包含第三方许可原文 |
-| Android release APK | 成功 | 交付 `logs/gradle-final.log` |
-| Android 完整 Lint | No issues found | 交付 `logs/lint-results-release.txt` |
-| APK 签名 | v2 签名验证通过 | 交付 `logs/apk-signature.txt` |
-| 包名/SDK | min 30，target/compile 37 | 交付 `logs/apk-manifest.txt` |
-| APK 权限 | 无 uses-permission | 交付 `logs/apk-permissions.txt` |
-| APK 内容 | 无自定义 `.so`、无 keystore、无测试密钥；许可已内嵌 | ZIP entry 与前端资源检查 |
-| 手机宽度浏览器预览 | 通过下述范围 | Chrome DevTools；真实生产静态资源 |
+| 检查 | 结果 |
+| --- | --- |
+| TypeScript / Vite | 类型检查及生产资源构建通过 |
+| 配置、MCP、技能、会话用量 | 53 项通过，0失败；tests/config.test.ts 与 tests/workspace.test.ts |
+| 原生事务故障注入 | 16 项通过；直接编译 APK 所用 TransactionEngine.java |
+| Android release | SDK37 / min30 / versionCode2 编译成功 |
+| 完整 Android Lint | No issues found（最终报告随交付提供） |
+| APK 签名 | 与0.1.0相同本地证书，v2验证通过 |
+| 上游原图 | mdpi/xhdpi/xxhdpi/xxxhdpi launcher PNG 保持上游字节；移除上游异常49px hdpi及重复round/未使用foreground资源，系统自动缩放正确密度图 |
+| 许可证 | 上游MIT和59项运行依赖许可原文嵌入APK |
+| 手机浏览器 | 360×792、DPR4、触控；另检查360×430及深色模式 |
 
-核心测试包含：缺失与空配置区分、CRLF/注释保留、多行字符串伪表头、inline/dotted 表、MCP/工作目录/项目保留、第三方 Key 不回退官方登录、keyring/auto 未知状态、可选字段恢复与外部修改保护、原始 TOML Key 编辑、中文输入引号、导入整批拒绝、脱敏 URL query/headers。
+新增12项测试包括：MCP的inline/dotted表修改、保留内置项与工作区、只删除目标项、无效输入拒绝、headers映射、技能YAML、会话索引损坏行、累计快照不重复累加、归档副本去重、响应/turn记录回退、派生线程排除、消息双格式去重和不完整标记。
 
-事务测试直接编译 APK 使用的 `TransactionEngine.java`，注入只读、中断、部分 UTF-8、关闭失败、读回不一致、并发修改、备份失败、恢复失败。它验证事务规则；测试中的 Port 是主机假对象，**不是 Android ContentResolver**。
+事务测试覆盖：只读、部分写入、UTF-8中断、关闭失败、读回失败、并发修改、备份失败、恢复不存在状态。Port 是主机假对象；这不是 ContentResolver 实机测试。
 
-## 浏览器预览范围
+## 界面检查
 
-使用 360×792 CSS viewport、DPR 4、mobile/touch，近似用户给定 1440×3168、640 DPI 的设备。也检查 360×430 的缩短视口。
+- 使用实际生产资源复核；不是原型截图。独立本地Chrome由Playwright运行。
+- 默认130%，+得到140%，-回130%，输入150%生效；document宽度仍为360。
+- 上游侧栏含 MCP、Skills、提示词、会话、授权中心、用量统计；均能打开正确页面。
+- 保存供应商草稿、提示词草稿成功；逐字输入时焦点保持。浏览器草稿仅存内存。
+- 供应商窄屏操作区换行，名称不再被挤窄。
+- 360×430时保存按钮处于可见范围，内容独立滚动。
+- 深色切换、原版图标、中文文字检查通过。截图位于交付目录screenshots。
+- 浏览器不模拟SAF写入成功，未连接目录时启用按钮不可用。
 
-- 200% 默认缩放；点击加得到 210%，减回 200%。
-- 输入 235%（有效整数字段），200/235/400% 时 viewport 与 document scroll width 都为 360，没有横向溢出。
-- 表单填写、方案添加、显示/隐藏密钥控件、保存为预览内存草稿。
-- 弹窗在 792/430 高度下底部保存区仍可见，内容独立滚动。
-- 浅/深主题与底部导航布局。
-- 浏览器预览没有假造文件写入成功；未授权时应用按钮不可用。
+## 未验证及边界
 
-Chrome 截图在工具中实际查看过。截图工具无法将文件写入本任务目录，故不交付假造的本地截图文件。首轮 favicon 404 已通过内置 logo favicon 引用修正。
+本次无Android设备联调，未宣称普通SAF真实读写已通过，也未宣称已接通Codex。待一加13 / Android17验证：系统DocumentsUI是否能展示Codex根，持久权限、输入法/返回手势、Keystore、应用重启、实际ContentResolver创建/截断/读回，以及Codex重启后新配置生效。
 
-这不验证 Android WebView 的实际消息桥、系统输入法、SAF 权限、设备 Keystore、文件提供方或 Codex。
+CodexDocumentsProvider已在本地宿主源码中实现，但不代表手机所装APK包含它。CC Switch显示已安装authority检测，并拒绝Codex子目录。没有修改宿主项目。
 
-## 尚未验证
+恢复六个页面不代表移植全部桌面能力：钥匙串/OAuth账号操作、完整技能包安装/市场、会话续接/删除、服务商计费额度及代理仍待宿主配合或后续实现。用量显示有边界的日志快照，复杂分段/压缩可能不足，不充当财务账单。
 
-- APK 在一加 13 / Android 17 上安装、启动、系统返回手势、键盘和进程重建。
-- 用户通过系统文件选择器授权普通目录后的真实 ContentResolver 读写、删除和持久权限。
-- 用户手机 Android Keystore 的加密/解密和重启后恢复。
-- Codex DocumentsProvider 的 URI、创建/截断、guest UID/权限和跨进程竞争行为。
-- 真实 API 请求和模型可用性、钥匙串官方登录、切换后 Codex 的实际生效情况。
+## 产物
 
-本次没有已连接 Android 设备，也没有安装或更改手机上的 Codex。没有宣称“普通 SAF 实机读写通过”或“已接通 Codex”。请按 [实机测试](device-test.md) 分两阶段确认。
-
-## 已知限制
-
-- 首版只支持原生 Responses 服务；需要上游代理的 Chat/Anthropic/OAuth 流程不在本次范围。
-- SAF 没有通用 compare-and-swap，最后检查与写入间仍可能有竞争；宿主需在内部协调写入。当前失败时保留恢复点，不盲目覆盖外部修改。
-- 恢复替换整个 config.toml，所以恢复前会保存当前版本；不恢复 auth.json/keyring。
-- 默认 200% 是真实页面放大，在 360 CSS 像素宽度下密度较低，允许用户自行调整。
-- Gradle 输出旧 API 和 Gradle 10 兼容性提示；当前工具链编译成功。为 API 30–32 保留的旧返回回调有明确局部 Lint 抑制，API 33+ 已注册平台返回回调。JavaScript 的局部抑制对应内置 React 页面，网络资源被阻止。
-
-## 本次 APK
-
-- 大小：3,114,673 bytes。
-- SHA-256：`0a653d1e3d99908662bcfce4127f22a9071ab12a6258dada2fc218e7b49639de`。
-- 签名证书 SHA-256：`8edf40669ceef43ac4098b74f37edf152226972644a2e2a86b05b337d9d3cca9`。
-- APK 最终校验以交付目录 `.apk.sha256` 与签名日志为准；重新构建可能因签名或构建元数据改变散列。
+APK及SHA-256文件位于交付目录；最终签名、包信息、权限和lint报告保存在logs。签名证书SHA-256：8edf40669ceef43ac4098b74f37edf152226972644a2e2a86b05b337d9d3cca9。

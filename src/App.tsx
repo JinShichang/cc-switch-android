@@ -1,321 +1,2460 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Plus, Minus, Settings, Layers, FileText, Archive, FolderOpen, Check, RefreshCw, Pencil, Trash2, Copy, X, ArrowLeft, ArrowUpRight, Download, Upload, ShieldCheck, AlertTriangle, Search, Eye, EyeOff, ChevronRight, KeyRound, Moon, Sun, Smartphone, RotateCcw, SlidersHorizontal } from "lucide-react";
-import { invoke, isNative } from "./bridge.ts";
-import type { AppState, AuthKind, Provider, Snapshot } from "./core/types.ts";
-import { captureCurrent, editRawConfig, exportProviders, formValues, importProviders, matchProvider, newProvider, planApply, readSummary, redactConfig, updateFormConfig, validateProvider } from "./core/codex.ts";
-import { patchPath } from "./core/tomlPatch.ts";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  AlertTriangle,
+  Archive,
+  ArrowLeft,
+  BookOpen,
+  ChartColumn,
+  Check,
+  ChevronRight,
+  Copy,
+  Download,
+  Eye,
+  FileText,
+  FolderOpen,
+  History,
+  Info,
+  KeyRound,
+  Menu,
+  Minus,
+  Moon,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Server,
+  Settings,
+  ShieldCheck,
+  Smartphone,
+  Sun,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import { Sidebar } from "./components/shell/Sidebar";
+import { AppPageHeader } from "./components/shell/AppPageHeader";
+import { AppGlyph } from "./components/shell/AppGlyph";
+import { SkillsIcon } from "./components/BrandIcons";
+import { Button } from "./components/ui/button";
+import { SegmentedControl } from "./components/ui/segmented-control";
+import { Switch } from "./components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./components/ui/dropdown-menu";
+import PromptListItem from "./components/prompts/PromptListItem";
+import { ProviderEditor, Modal } from "./ProviderEditor";
+import { invoke, isNative } from "./bridge";
+import {
+  captureCurrent,
+  exportProviders,
+  formValues,
+  importProviders,
+  matchProvider,
+  newProvider,
+  planApply,
+  readSummary,
+  redactConfig,
+  validateProvider,
+} from "./core/codex";
+import type { AppState, Provider, Snapshot } from "./core/types";
+import type { Prompt } from "./lib/api";
+import type { SettingsSection, View } from "./lib/navigation";
+import {
+  aggregateUsage,
+  changeMcp,
+  mcpServers,
+  parseMcpImport,
+  parseSession,
+  parseSessionIndex,
+  skillMetadata,
+  validateMcp,
+  type Catalog,
+  type DocumentFile,
+  type SessionData,
+  type SessionSummary,
+  type TextDocument,
+} from "./core/workspace";
 import thirdPartyNotices from "../THIRD_PARTY_NOTICES.txt?raw";
+import logo from "./assets/icons/logo.svg";
 
-const EMPTY: AppState = { providers: [], backups: [], directory: null, pendingRecovery: false, settings: { zoom: 200, theme: "system" }, native: isNative };
-type Tab = "providers" | "current" | "backups" | "settings";
-type Dialog = { title: string; content: ReactNode; confirm?: () => Promise<void>; confirmLabel?: string; danger?: boolean };
-const date = (time: number) => new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(time);
-const errorMessage = (error: unknown) => error instanceof Error ? error.message : "操作未完成，请重试。";
+const EMPTY: AppState = {
+  providers: [],
+  backups: [],
+  prompts: [],
+  documentBackups: [],
+  pendingDocuments: [],
+  directory: null,
+  pendingRecovery: false,
+  settings: { zoom: 130, theme: "system" },
+  native: isNative,
+};
+const message = (error: unknown) =>
+  error instanceof Error ? error.message : "操作未完成，请重试。";
+const date = (value: number) =>
+  new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(value);
+const number = (value: number) => new Intl.NumberFormat("zh-CN").format(value);
+type Dialog = {
+  title: string;
+  body: ReactNode;
+  confirm?: () => Promise<void>;
+  label?: string;
+  danger?: boolean;
+};
+type PickerStatus = {
+  codexProviderInstalled: boolean;
+  pickerAvailable: boolean;
+  pickerPackage: string;
+  message: string;
+};
+type McpEditor = { original?: string; name: string; json: string };
+type PromptEditor = { draft: Prompt };
+type SkillEditor = {
+  file: TextDocument;
+  draft: string;
+  folder: string;
+  create: boolean;
+};
+const PAGE_NAMES: Record<View, string> = {
+  providers: "Codex",
+  mcp: "MCP",
+  skills: "Skills",
+  prompts: "提示词",
+  sessions: "会话",
+  auth: "授权中心",
+  usage: "用量统计",
+  apps: "应用",
+  settings: "设置",
+};
+const PAGE_ICONS = {
+  mcp: Server,
+  skills: SkillsIcon,
+  prompts: BookOpen,
+  sessions: History,
+  auth: KeyRound,
+  usage: ChartColumn,
+  apps: Smartphone,
+  settings: Settings,
+};
 
-function Modal({ title, children, onClose, busy = false }: { title: string; children: ReactNode; onClose: () => void; busy?: boolean }) {
-  const element = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const el = element.current!;
-    el.focus();
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) { event.preventDefault(); onClose(); }
-      if (event.key === "Tab") {
-        const all = [...el.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')].filter(item => item.getClientRects().length);
-        const first = all[0], last = all[all.length - 1];
-        if (!first) { event.preventDefault(); return; }
-        if (event.shiftKey && (document.activeElement === first || document.activeElement === el)) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && (document.activeElement === last || document.activeElement === el)) { event.preventDefault(); first.focus(); }
-      }
-    };
-    el.addEventListener("keydown", key);
-    const old = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { el.removeEventListener("keydown", key); document.body.style.overflow = old; previous?.focus(); };
-  }, [busy, onClose]);
-  return <div className="modal-overlay"><div ref={element} className="modal" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
-    <header className="modal-header"><h2>{title}</h2><button className="icon-button" disabled={busy} aria-label="关闭" onClick={onClose}><X /></button></header>
-    {children}
-  </div></div>;
+function Empty({
+  icon,
+  title,
+  children,
+  action,
+}: {
+  icon: ReactNode;
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="empty-state">
+      <div className="empty-icon">{icon}</div>
+      <h2>{title}</h2>
+      {children && <p>{children}</p>}
+      {action}
+    </div>
+  );
+}
+function Panel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="panel">
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
+}
+function More({
+  label,
+  items,
+}: {
+  label: string;
+  items: {
+    label: string;
+    onClick: () => void;
+    danger?: boolean;
+    disabled?: boolean;
+  }[];
+}) {
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="quiet" size="icon" aria-label={label}>
+          <MoreHorizontal size={17} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {items.map((item) => (
+          <DropdownMenuItem
+            disabled={item.disabled}
+            key={item.label}
+            className={item.danger ? "text-danger-text" : ""}
+            onSelect={item.onClick}
+          >
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function App() {
   const [state, setState] = useState<AppState>(EMPTY);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [tab, setTab] = useState<Tab>("providers");
-  const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [query, setQuery] = useState("");
-  const [editor, setEditor] = useState<Provider | null>(null);
-  const [dialog, setDialog] = useState<Dialog | null>(null);
-  const [keysIncluded, setKeysIncluded] = useState(false);
-  const [zoomInput, setZoomInput] = useState("200");
-  const [busyLabel, setBusyLabel] = useState("正在处理…");
-  const [systemDark, setSystemDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
-
-  useEffect(() => {
-    const media = matchMedia("(prefers-color-scheme: dark)");
-    const changed = () => setSystemDark(media.matches);
-    media.addEventListener("change", changed);
-    return () => media.removeEventListener("change", changed);
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    invoke<AppState>("bootstrap").then(async next => {
-      if (!alive) return;
-      setState(next); setZoomInput(String(next.settings.zoom));
-      if (next.directory) {
-        try { const live = await invoke<Snapshot>("readCurrent"); if (alive) setSnapshot(live); }
-        catch (e) { if (alive) setError(errorMessage(e)); }
-      }
-    }).catch(e => { if (alive) setError(errorMessage(e)); }).finally(() => { if (alive) setReady(true); });
-    return () => { alive = false; };
-  }, []);
-
-  useEffect(() => {
-    const media = matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => document.documentElement.classList.toggle("dark", state.settings.theme === "dark" || (state.settings.theme === "system" && media.matches));
-    apply(); media.addEventListener("change", apply);
-    document.documentElement.style.setProperty("--zoom", String(state.settings.zoom / 100));
-    return () => media.removeEventListener("change", apply);
-  }, [state.settings, systemDark]);
-
-  useEffect(() => { window.scrollTo(0, 0); }, [tab]);
-
-  useEffect(() => {
-    window.__ccswitchBack = () => {
-      if (busy) return true;
-      if (dialog) { setDialog(null); return true; }
-      if (editor) { setEditor(null); return true; }
-      if (tab !== "providers") { setTab("providers"); return true; }
-      return false;
-    };
-    return () => { delete window.__ccswitchBack; };
-  }, [busy, dialog, editor, tab]);
+  const [view, setView] = useState<View>("providers");
+  const [section, setSection] = useState<SettingsSection>("general");
+  const [mobileNav, setMobileNav] = useState(false);
+  const [busy, setBusy] = useState(false),
+    [busyLabel, setBusyLabel] = useState("");
+  const busyRef = useRef(false);
+  const [ready, setReady] = useState(false),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+  const [query, setQuery] = useState(""),
+    [providerEditor, setProviderEditor] = useState<Provider | null>(null);
+  const [dialog, setDialog] = useState<Dialog | null>(null),
+    [mcpEditor, setMcpEditor] = useState<McpEditor | null>(null);
+  const [promptEditor, setPromptEditor] = useState<PromptEditor | null>(null),
+    [skillEditor, setSkillEditor] = useState<SkillEditor | null>(null);
+  const [promptFile, setPromptFile] = useState<TextDocument | null>(null),
+    [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [session, setSession] = useState<{
+    file: DocumentFile;
+    parsed: SessionSummary;
+  } | null>(null);
+  const [usageRows, setUsageRows] = useState<SessionSummary[]>([]),
+    [usageScanned, setUsageScanned] = useState(false);
+  const [usageErrors, setUsageErrors] = useState(0),
+    [usageLimit, setUsageLimit] = useState(false);
+  const [picker, setPicker] = useState<PickerStatus | null>(null),
+    [zoomInput, setZoomInput] = useState("130");
+  const [keysIncluded, setKeysIncluded] = useState(false),
+    [providerTab, setProviderTab] = useState<"list" | "current">("list");
+  const [skillsMeta, setSkillsMeta] = useState<
+    Record<string, { name: string; description: string }>
+  >({});
 
   const action = async (label: string, work: () => Promise<void>) => {
-    if (busy) return;
-    setBusy(true); setBusyLabel(label); setError(""); setNotice("");
-    try { await work(); }
-    catch (e: any) {
-      if (e?.code !== "cancelled") setError(errorMessage(e));
-      // A failed native transaction may have created a recovery journal.
-      if (state.native) try { setState(await invoke<AppState>("bootstrap")); } catch { }
-    } finally { setBusy(false); }
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setBusyLabel(label);
+    setError("");
+    setNotice("");
+    try {
+      await work();
+    } catch (e: any) {
+      if (e?.code !== "cancelled") setError(message(e));
+      if (isNative)
+        try {
+          setState(await invoke<AppState>("bootstrap"));
+        } catch {}
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   };
   const refresh = async () => {
     try {
-      const current = await invoke<Snapshot>("readCurrent");
-      setSnapshot(current);
+      const live = await invoke<Snapshot>("readCurrent");
+      setSnapshot(live);
       setState(await invoke<AppState>("bootstrap"));
-      return current;
-    } catch (error) { setSnapshot(null); throw error; }
+      return live;
+    } catch (e) {
+      setSnapshot(null);
+      throw e;
+    }
   };
-  const authorize = () => action("等待系统目录授权…", async () => {
-    const next = await invoke<AppState>("chooseDirectory");
-    setState(next); setSnapshot(null);
-    const live = await invoke<Snapshot>("readCurrent");
-    setSnapshot(live);
-    setNotice(next.directory?.isCodexProvider ? "已获得 Codex 文档目录权限；运行中的配置仍需在 Codex 中确认。" : "已授权普通 SAF 目录。这里的读写属于测试/普通目录操作，不代表已经接通 Codex。");
-  });
-  const saveProviders = async (providers: Provider[]) => setState(await invoke<AppState>("saveProviders", { providers }));
-  const apply = (provider: Provider) => action("正在备份、写入并读回核对…", async () => {
-    if (!snapshot) throw new Error("请先授权目录并读取当前配置。");
-    // Use the displayed revision. Native code rejects changes since this view;
-    // never silently refresh and overwrite a concurrent Codex edit on apply.
-    const plan = planApply(snapshot, provider);
-    const result = await invoke<{ state: AppState; snapshot: Snapshot }>("apply", { providerId: provider.id, config: plan.config, expectedRevision: snapshot.revision, ownership: plan.ownership });
-    setState(result.state); setSnapshot(result.snapshot);
-    setNotice(`文件保存成功，已读回核对。请完全重启 Codex，并在新会话中确认服务商和模型。${plan.warnings.length ? " " + plan.warnings.join(" ") : ""}`);
-  });
-  const previewPlan = (provider: Provider) => {
-    try {
-      if (!snapshot) throw new Error("请先授权目录并读取当前配置。");
-      const plan = planApply(snapshot, provider);
-      setDialog({ title: "应用前预览", content: <><p className="muted">将修改以下字段，API Key 已隐藏。MCP、工作目录及无关设置通过保护检查。</p>
-        <div className="chips">{plan.changedFields.length ? plan.changedFields.map(f => <code key={f}>{f}</code>) : <span className="badge success">文件内容已一致</span>}</div>
-        {plan.warnings.map(w => <p className="inline-warning" key={w}>{w}</p>)}<pre className="code-view">{redactConfig(plan.config)}</pre></> });
-    } catch (e) { setError(errorMessage(e)); }
-  };
-  const restore = (id?: string) => {
-    setDialog({ title: id ? "恢复配置备份" : "恢复未确认写入", danger: true, confirmLabel: "备份当前并恢复", content: <>
-      <p>恢复会替换此目录的整个 config.toml，包括备份中的 MCP 和自定义设置。恢复前会先备份当前文件，并在完成后读回核对。</p>
-      <p className="muted">auth.json 和钥匙串保持原样。恢复文件后仍需重启 Codex。</p>
-    </>, confirm: async () => {
-      // A corrupt current TOML is still restorable: native reads bytes without
-      // requiring the UI parser to accept the damaged file.
-      const live = await invoke<{ revision: string }>("readRevision");
-      const result = await invoke<{ state: AppState; snapshot: Snapshot }>(id ? "restore" : "recover", { id, expectedRevision: live.revision });
-      setState(result.state); setSnapshot(result.snapshot); setDialog(null);
-      setNotice("配置备份已恢复，读回核对通过。请重启 Codex 后确认生效。");
-    } });
-  };
-  const importFile = () => action("等待选择导入文件…", async () => {
-    const file = await invoke<{ text: string }>("importFile");
-    const imported = importProviders(file.text);
-    if (state.providers.length + imported.providers.length > 200) throw new Error("导入后将超过 200 个方案，请先删除不需要的方案。");
-    setDialog({ title: "确认导入方案", confirmLabel: `导入 ${imported.providers.length} 项`, content: <>
-      <p>将添加以下方案，现有方案保留。导入不会修改已授权目录。</p>
-      <ul>{imported.providers.map(p => <li key={p.id}>{p.name}</li>)}</ul>
-      {imported.warnings.map((w, i) => <p className="inline-warning" key={i}>{w}</p>)}
-    </>, confirm: async () => {
-      await saveProviders([...state.providers, ...imported.providers]); setDialog(null); setTab("providers");
-      setNotice("方案已导入。请检查服务地址和 API Key，再应用到目录。");
-    } });
-  });
-  const saveSetting = async (settings: AppState["settings"]) => {
-    setState(await invoke<AppState>("settings", settings)); setZoomInput(String(settings.zoom));
-  };
-  const setZoom = (number: number) => action("保存缩放…", async () => {
-    const zoom = Math.min(400, Math.max(50, Math.round(number)));
-    if (!Number.isFinite(zoom)) { setZoomInput(String(state.settings.zoom)); return; }
-    await saveSetting({ ...state.settings, zoom });
-  });
-  const closeEditor = useCallback(() => setEditor(null), []);
-  const closeDialog = useCallback(() => setDialog(null), []);
-
-  let summary: ReturnType<typeof readSummary> | null = null;
-  let configError = "";
-  if (snapshot) try { summary = readSummary(snapshot); } catch (e) { configError = errorMessage(e); }
-  const providers = state.providers.filter(p => `${p.name} ${formDescription(p)}`.toLowerCase().includes(query.toLowerCase()));
-  const matched = snapshot ? state.providers.filter(p => matchProvider(snapshot, p) === "exact") : [];
-
-  const dark = state.settings.theme === "dark" || (state.settings.theme === "system" && systemDark);
-  return <div className={`scaled-root ${dark ? "dark" : ""}`} style={{ zoom: state.settings.zoom / 100 } as CSSProperties}>
-    <div className="shell" aria-hidden={!!(editor || dialog)}>
-      <header className="topbar"><div className="brand"><img src="./logo.svg" alt="" /><span>CC Switch</span><span className="platform-tag">Android</span></div><button className="icon-button" aria-label="打开设置" onClick={() => setTab("settings")} disabled={busy}><Settings /></button></header>
-      <main className="content" aria-busy={busy}>
-        {!state.native && <div className="preview-banner"><Smartphone /><span>浏览器预览 · 草稿仅保存在内存中，SAF 读写请安装 APK</span></div>}
-        {(error || configError) && <div className="banner error" role="alert"><AlertTriangle /><div>{error || configError}</div><button aria-label="关闭错误提示" className="icon-button" onClick={() => setError("")}><X /></button></div>}
-        {notice && <div className="banner notice" role="status"><Check /><div>{notice}</div><button aria-label="关闭操作提示" className="icon-button" onClick={() => setNotice("")}><X /></button></div>}
-        {!ready ? <div className="empty"><RefreshCw className="spin" /><p>正在读取本地方案…</p></div> : <>
-          {tab === "providers" && <>
-            <div className="page-heading"><div><div className="eyebrow"><img src="./codex.svg" alt="" /> CODEX</div><h1>服务商</h1></div><button className="button primary" disabled={busy} onClick={() => setEditor(newProvider())}><Plus /> 添加</button></div>
-            <button className={`directory-card ${state.directory ? "connected" : ""}`} disabled={busy} onClick={authorize}>
-              <span className="directory-icon"><FolderOpen /></span><span className="directory-copy"><strong>{state.directory?.name ?? "连接配置目录"}</strong><small>{state.directory ? state.directory.isCodexProvider ? "Codex 文档目录 · 点击更换" : "普通 SAF 目录 · 尚未接通 Codex" : "选择 Codex 提供的 .codex 文件夹"}</small></span><ChevronRight />
-            </button>
-            {snapshot && <div className="live-line"><span className={`status-dot ${summary ? "ok" : ""}`} /><span>{summary ? matched.length ? `${matched.length} 个方案与文件匹配` : "当前文件未匹配已保存方案" : "当前文件需要修复"}</span><button className="icon-button" disabled={busy} aria-label="刷新当前配置" onClick={() => action("读取当前配置…", async () => { await refresh(); })}><RefreshCw /></button></div>}
-            {state.pendingRecovery && <button className="recovery-callout" disabled={busy} onClick={() => setTab("backups")}><AlertTriangle /> 有未确认写入，请先恢复 <ChevronRight /></button>}
-            {!!state.providers.length && <label className="search-box"><Search /><input aria-label="搜索服务商" placeholder="搜索服务商、模型或地址" value={query} onChange={e => setQuery(e.target.value)} /></label>}
-            {!providers.length ? <section className="empty"><div className="empty-icon"><Layers /></div><h2>{query ? "没有找到匹配方案" : "为 Codex 添加服务商"}</h2><p>{query ? "试试其他名称或地址。" : "保存多套服务地址、API Key 和模型，随时切换。"}</p>{!query && <><button className="button primary" disabled={busy} onClick={() => setEditor(newProvider())}><Plus /> 添加第一个方案</button><button className="button ghost" disabled={busy} onClick={importFile}><Upload /> 从文件导入</button></>}</section> : <div className="provider-grid">
-              {providers.map(provider => {
-                const match = snapshot ? matchProvider(snapshot, provider) : "different";
-                const exact = match === "exact";
-                let values; try { values = formValues(provider); } catch { values = { model: "配置需修复", baseUrl: "", apiKey: "", effort: "", envKey: "" }; }
-                return <article className={`provider-card ${exact ? "active" : ""}`} key={provider.id}>
-                  <div className="card-heading"><div className={`provider-avatar ${provider.authKind === "official" ? "official" : ""}`}>{provider.authKind === "official" ? <img src="./codex.svg" alt="" /> : provider.name.charAt(0).toUpperCase()}</div><div className="card-title"><h2>{provider.name}</h2><span className={`badge ${exact ? "direct" : "neutral"}`}>{exact ? <><Check /> 文件匹配</> : match === "related" ? "部分参数不同" : provider.authKind === "official" ? "官方登录" : "直连"}</span></div><button className="icon-button" disabled={busy} aria-label={`编辑 ${provider.name}`} onClick={() => setEditor(structuredClone(provider))}><Pencil /></button></div>
-                  <div className="provider-endpoint" title={values.baseUrl}>{values.baseUrl || (provider.authKind === "official" ? "使用 Codex 已有的官方登录" : "尚未填写服务地址")}</div>
-                  <div className="provider-model"><span>模型</span><strong>{values.model || "Codex 默认"}</strong></div>
-                  <div className="provider-meta"><span><KeyRound /> {provider.authKind === "official" ? "由 Codex 管理" : provider.authKind === "env" ? values.envKey || "环境变量未设置" : provider.authKind === "none" ? "无认证" : values.apiKey ? "API Key 已保存" : "待填写 API Key"}</span>{values.effort && <span>{values.effort}</span>}</div>
-                  {provider.notes && <p className="card-notes">{provider.notes}</p>}
-                  <div className="card-actions"><button className={`button ${exact ? "selected" : "primary"}`} disabled={busy || !snapshot || !!configError || state.pendingRecovery} onClick={() => apply(provider)}>{exact ? <Check /> : <ArrowUpRight />} {exact ? "重新应用" : "应用"}</button><button className="icon-button" aria-label={`预览 ${provider.name} 的修改`} disabled={busy || !snapshot} onClick={() => previewPlan(provider)}><Eye /></button><button className="icon-button" aria-label={`复制 ${provider.name}`} disabled={busy} onClick={() => { const copy = structuredClone(provider); copy.id = crypto.randomUUID(); copy.name += " 副本"; setEditor(copy); }}><Copy /></button><button className="icon-button danger-text" aria-label={`删除 ${provider.name}`} disabled={busy} onClick={() => setDialog({ title: "删除服务商方案", danger: true, confirmLabel: "删除方案", content: <p>删除“{provider.name}”的本地方案。已写入 Codex 目录的配置和备份将保留。</p>, confirm: async () => { await saveProviders(state.providers.filter(p => p.id !== provider.id)); setDialog(null); } })}><Trash2 /></button></div>
-                </article>;
-              })}
-            </div>}
-            <p className="page-footnote"><ShieldCheck /> 文件写入会备份并读回核对。运行中的 Codex 是否已使用新配置，需要重启后确认。</p>
-          </>}
-
-          {tab === "current" && <>
-            <div className="page-heading"><div><div className="eyebrow">CONFIGURATION</div><h1>当前配置</h1></div><button className="icon-button" disabled={busy || !state.directory} aria-label="重新读取文件" onClick={() => action("读取当前配置…", async () => { await refresh(); })}><RefreshCw /></button></div>
-            {!state.directory ? <section className="empty"><FolderOpen /><h2>先授权配置目录</h2><p>系统文件选择器会让你选择 Codex 的 .codex 目录。</p><button className="button primary" disabled={busy} onClick={authorize}>选择目录</button></section> : <>
-              <section className="panel"><h2><FolderOpen /> {state.directory.name}</h2><p className="muted break-word">{state.directory.authority}</p><span className="badge neutral">{state.directory.isCodexProvider ? "Codex DocumentsProvider" : "普通 / 测试 SAF 目录"}</span></section>
-              {summary && snapshot && <>
-                <section className="panel"><h2>文件状态</h2><dl className="details"><div><dt>config.toml</dt><dd>{snapshot.config === null ? "不存在，应用时创建" : "已读取"}</dd></div><div><dt>当前服务商</dt><dd>{summary.providerId}</dd></div><div><dt>模型</dt><dd>{summary.model}</dd></div><div><dt>认证存储</dt><dd>{summary.auth.mode}</dd></div><div><dt>运行状态</dt><dd className="warning-text">未确认，需在 Codex 中核对</dd></div></dl><p className="muted">{summary.auth.state}</p></section>
-                <button className="button full" disabled={busy || snapshot.config === null} onClick={() => { try { setEditor(captureCurrent(snapshot, "从当前配置导入")); } catch (e) { setError(errorMessage(e)); } }}><Plus /> 将当前配置保存为方案</button>
-                <section className="panel"><h2><FileText /> config.toml</h2><p className="muted">脱敏查看。API Key、令牌和密码已隐藏。</p><pre className="code-view">{snapshot.config === null ? "（文件尚不存在）" : redactConfig(snapshot.config)}</pre></section>
-              </>}
-              {!snapshot && <button className="button full" disabled={busy} onClick={authorize}>重新授权目录</button>}
-            </>}
-          </>}
-
-          {tab === "backups" && <>
-            <div className="page-heading"><div><div className="eyebrow">LOCAL BACKUPS</div><h1>备份与恢复</h1></div><Archive className="heading-icon" /></div>
-            <section className="panel"><h2><ShieldCheck /> 最近 10 次</h2><p className="muted">每次更改文件前保存备份，并用 Android Keystore 加密。备份绑定原目录；恢复会保留当前版本供再次恢复。</p></section>
-            {state.pendingRecovery && <section className="panel warning-panel"><h2><AlertTriangle /> 上次写入未确认</h2><p>可能发生中断或写入失败。请先恢复写入前的文件，再继续切换。</p><button className="button danger" disabled={busy} onClick={() => restore()}>恢复写入前配置</button></section>}
-            {!state.backups.length ? <section className="empty"><Archive /><h2>还没有文件备份</h2><p>首次应用服务商时会自动创建。</p></section> : state.backups.map(backup => <section className="backup-row" key={backup.id}><div><strong>{backup.reason}</strong><span>{date(backup.createdAt)} · {backup.directoryName}</span><small>{backup.existed ? "保存了原 config.toml" : "原 config.toml 不存在"}</small></div><button className="button" disabled={busy || backup.treeUri !== state.directory?.uri} onClick={() => restore(backup.id)}><RotateCcw /> 恢复</button></section>)}
-          </>}
-
-          {tab === "settings" && <>
-            <div className="page-heading"><div><div className="eyebrow">PREFERENCES</div><h1>设置</h1></div><SlidersHorizontal className="heading-icon" /></div>
-            <section className="panel"><h2>界面缩放</h2><p className="muted">默认 200%。可以直接输入，或每次调整 10%。</p><div className="zoom-control"><button aria-label="缩小 10%" disabled={busy || state.settings.zoom <= 50} onClick={() => setZoom(state.settings.zoom - 10)}><Minus /></button><div><input type="number" inputMode="numeric" min={50} max={400} step={1} aria-label="缩放百分比" value={zoomInput} onChange={e => setZoomInput(e.target.value)} onBlur={() => { if (zoomInput !== String(state.settings.zoom)) void setZoom(Number(zoomInput)); }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} /><span>%</span></div><button aria-label="放大 10%" disabled={busy || state.settings.zoom >= 400} onClick={() => setZoom(state.settings.zoom + 10)}><Plus /></button></div><button className="text-button" disabled={busy} onClick={() => setZoom(200)}>恢复 200%</button></section>
-            <section className="panel"><h2>外观</h2><div className="segmented">{([["light", "浅色", Sun], ["dark", "深色", Moon], ["system", "系统", Smartphone]] as const).map(([value, label, Icon]) => <button key={value} className={state.settings.theme === value ? "chosen" : ""} disabled={busy} onClick={() => action("保存外观…", () => saveSetting({ ...state.settings, theme: value }))}><Icon />{label}</button>)}</div><div className="setting-label"><span>语言</span><strong>简体中文</strong></div></section>
-            <section className="panel"><h2>配置目录</h2><p className="muted">{state.directory ? `${state.directory.name} · ${state.directory.isCodexProvider ? "Codex 目录" : "普通 SAF 目录"}` : "尚未选择目录"}</p><button className="button full" disabled={busy} onClick={authorize}><FolderOpen /> {state.directory ? "重新授权 / 更换目录" : "选择目录"}</button>{state.directory && <button className="text-button danger-text" disabled={busy} onClick={() => action("解除目录授权…", async () => { setState(await invoke<AppState>("releaseDirectory")); setSnapshot(null); setNotice("目录授权已解除，本地方案与备份已保留。"); })}>解除目录授权</button>}</section>
-            <section className="panel"><h2>导入与导出</h2><p className="muted">支持安卓版方案 JSON 和上游 Codex 供应商 JSON。导入后先检查，再应用。</p><button className="button full" disabled={busy} onClick={importFile}><Upload /> 导入方案</button><label className="checkbox-row"><input type="checkbox" checked={keysIncluded} onChange={e => setKeysIncluded(e.target.checked)} /><span>导出时包含 API Key（明文文件）</span></label><button className="button full" disabled={busy || !state.providers.length} onClick={() => action("等待选择导出位置…", async () => { await invoke("exportFile", { text: exportProviders(state.providers, keysIncluded) }); setNotice(keysIncluded ? "方案已导出并读回核对。文件包含明文 API Key，请妥善保管。" : "方案已导出并读回核对，未包含 API Key。导入后需要重新填写密钥。"); })}><Download /> 导出 {state.providers.length} 个方案</button></section>
-            <section className="panel about"><div className="about-brand"><img src="./logo.svg" alt="" /><div><h2>CC Switch Android</h2><span>0.1.0 · Codex 专用</span></div></div><p className="muted">基于 CC Switch 4.0.33，由独立 Android 宿主提供目录访问。无需 PRoot 或存储管理权限。</p><button className="text-button" onClick={() => setDialog({ title: "开源许可", content: <><p>CC Switch · Copyright (c) 2025 Jason Young</p><p>本项目采用 MIT 许可证。保留了上游 Codex 模板、文本规范化函数、图标与设计 token；配置投影规则移植自上游 Rust 实现。</p><p>React · MIT<br />Lucide · ISC<br />smol-toml · BSD-3-Clause<br />AndroidX WebKit · Apache-2.0</p><pre className="license-text">{thirdPartyNotices}</pre><p className="license-text">Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:<br /><br />The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.<br /><br />THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p></> })}>开源许可与版权说明 <ChevronRight /></button></section>
-          </>}
-        </>}
-      </main>
-      <nav className="bottom-nav" aria-label="主导航">{([["providers", "服务商", Layers], ["current", "当前", FileText], ["backups", "备份", Archive], ["settings", "设置", Settings]] as const).map(([key, label, Icon]) => <button key={key} className={tab === key ? "nav-active" : ""} aria-current={tab === key ? "page" : undefined} disabled={busy} onClick={() => { setTab(key); window.scrollTo(0, 0); }}><Icon /><span>{label}</span></button>)}</nav>
-      {busy && <div className="busy-indicator" role="status"><RefreshCw className="spin" />{busyLabel}</div>}
-    </div>
-    {editor && <Editor provider={editor} saveError={error} busy={busy} onClose={closeEditor} onSave={async provider => { await action("保存服务商方案…", async () => { const valid = validateProvider(provider); const existing = state.providers.some(p => p.id === valid.id); await saveProviders(existing ? state.providers.map(p => p.id === valid.id ? valid : p) : [...state.providers, valid]); setEditor(null); setNotice(state.native ? "方案已保存到本地。点击“应用”才会修改授权目录。" : "草稿已保存在本次预览内存中，关闭或刷新页面后清除。"); }); }} />}
-    {dialog && <Modal title={dialog.title} busy={busy} onClose={closeDialog}><div className="modal-body">{error && <p className="inline-warning" role="alert">{error}</p>}{dialog.content}</div><footer className="modal-footer"><button className="button" disabled={busy} onClick={closeDialog}>{dialog.confirm ? "取消" : "关闭"}</button>{dialog.confirm && <button className={`button ${dialog.danger ? "danger" : "primary"}`} disabled={busy} onClick={() => action("正在处理…", dialog.confirm!)}>{dialog.confirmLabel ?? "确认"}</button>}</footer></Modal>}
-  </div>;
-}
-
-function formDescription(provider: Provider) {
-  try { const values = formValues(provider); return `${values.model} ${values.baseUrl}`; } catch { return ""; }
-}
-
-function Editor({ provider, onClose, onSave, busy, saveError }: { saveError: string; provider: Provider; onClose: () => void; onSave: (provider: Provider) => Promise<void>; busy: boolean }) {
-  const [draft, setDraft] = useState<Provider>(() => structuredClone(provider));
-  const [fields, setFields] = useState(() => formValues(provider));
-  const [rawMode, setRawMode] = useState(false);
-  const [visible, setVisible] = useState(false);
-  const [error, setError] = useState("");
-  const setField = (key: keyof typeof fields, value: string) => {
-    const nextFields = { ...fields, [key]: value };
-    setFields(nextFields);
-    try {
-      let config = draft.settingsConfig.config;
-      if (draft.authKind !== "official") {
-        config = updateFormConfig(config, { name: draft.name, model: nextFields.model, baseUrl: nextFields.baseUrl, effort: nextFields.effort, envKey: draft.authKind === "env" ? nextFields.envKey : undefined });
-        if (key === "apiKey") {
-          config = patchPath(config, ["model_providers", "custom", "experimental_bearer_token"], undefined);
-          config = patchPath(config, ["experimental_bearer_token"], undefined);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const next = await invoke<AppState>("bootstrap");
+        if (!alive) return;
+        setState(next);
+        setZoomInput(String(next.settings.zoom));
+        setPicker(await invoke<PickerStatus>("providerStatus"));
+        if (next.directory) {
+          const current = await invoke<Snapshot>("readCurrent");
+          if (alive) setSnapshot(current);
         }
-      } else {
-        config = patchPath(config, ["model"], nextFields.model || undefined);
-        config = patchPath(config, ["model_reasoning_effort"], nextFields.effort || undefined);
+      } catch (e) {
+        if (alive) setError(message(e));
+      } finally {
+        if (alive) setReady(true);
       }
-      setDraft({ ...draft, settingsConfig: { config, auth: { OPENAI_API_KEY: nextFields.apiKey } } });
-      setError("");
-    } catch (e) { setError(errorMessage(e)); }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(() => {
+    const media = matchMedia("(prefers-color-scheme: dark)");
+    const sync = () =>
+      document.documentElement.classList.toggle(
+        "dark",
+        state.settings.theme === "dark" ||
+          (state.settings.theme === "system" && media.matches),
+      );
+    sync();
+    media.addEventListener("change", sync);
+    document.documentElement.style.setProperty(
+      "--zoom",
+      String(state.settings.zoom / 100),
+    );
+    document.body.style.zoom = String(state.settings.zoom / 100);
+    const size = () =>
+      document.documentElement.style.setProperty(
+        "--app-height",
+        window.innerHeight / (state.settings.zoom / 100) + "px",
+      );
+    size();
+    window.addEventListener("resize", size);
+    return () => {
+      media.removeEventListener("change", sync);
+      window.removeEventListener("resize", size);
+    };
+  }, [state.settings]);
+  const navigate = (next: View) => {
+    if (busyRef.current) return;
+    setView(next);
+    setMobileNav(false);
+    setQuery("");
+    setSession(null);
+    setError("");
   };
-  const changeKind = (kind: AuthKind) => {
-    if (kind === "official" || draft.authKind === "official") {
-      const next = newProvider(kind); next.id = draft.id; next.name = draft.name; next.notes = draft.notes;
-      setDraft(next); setFields(formValues(next));
-    } else setDraft({ ...draft, authKind: kind });
-  };
-  const submit = async () => {
+  useEffect(() => {
+    if (!state.directory || !["prompts", "skills", "sessions"].includes(view))
+      return;
+    let alive = true;
+    setCatalog(null);
+    (async () => {
+      try {
+        if (view === "prompts") {
+          const doc = await invoke<TextDocument>("readDocument", {
+            path: "AGENTS.md",
+          });
+          if (alive) setPromptFile(doc);
+        } else {
+          const result = await invoke<Catalog>("catalog", { kind: view });
+          if (alive) setCatalog(result);
+        }
+      } catch (e) {
+        if (alive) setError(message(e));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [view, state.directory?.uri]);
+  useEffect(() => {
+    window.__ccswitchBack = () => {
+      if (busyRef.current) return true;
+      if (dialog) {
+        setDialog(null);
+        return true;
+      }
+      if (providerEditor || promptEditor || mcpEditor || skillEditor) {
+        setProviderEditor(null);
+        setPromptEditor(null);
+        setMcpEditor(null);
+        setSkillEditor(null);
+        return true;
+      }
+      if (mobileNav) {
+        setMobileNav(false);
+        return true;
+      }
+      if (session) {
+        setSession(null);
+        return true;
+      }
+      if (view !== "providers") {
+        navigate("providers");
+        return true;
+      }
+      return false;
+    };
+    return () => {
+      delete window.__ccswitchBack;
+    };
+  }, [
+    view,
+    dialog,
+    providerEditor,
+    promptEditor,
+    mcpEditor,
+    skillEditor,
+    mobileNav,
+    session,
+  ]);
+  const authorize = () =>
+    action("等待系统目录授权…", async () => {
+      const next = await invoke<AppState>("chooseDirectory");
+      setState(next);
+      setSnapshot(null);
+      setPromptFile(null);
+      setCatalog(null);
+      setUsageRows([]);
+      setUsageScanned(false);
+      setSnapshot(await invoke<Snapshot>("readCurrent"));
+      setNotice(
+        next.directory?.isCodexProvider
+          ? "已授权 Codex 文档目录。请安全退出桌面客户端后切换配置。"
+          : "已授权普通 SAF 目录；对此目录的验证不代表已接通 Codex。",
+      );
+    });
+  const saveProviders = async (providers: Provider[]) =>
+    setState(await invoke<AppState>("saveProviders", { providers }));
+  const savePrompts = async (prompts: Prompt[]) =>
+    setState(await invoke<AppState>("savePrompts", { prompts }));
+  const applyProvider = (provider: Provider) =>
+    action("正在备份、写入并读回核对…", async () => {
+      if (!snapshot) throw new Error("请先授权目录并读取配置。");
+      const plan = planApply(snapshot, provider);
+      const result = await invoke<{ state: AppState; snapshot: Snapshot }>(
+        "apply",
+        {
+          providerId: provider.id,
+          config: plan.config,
+          ownership: plan.ownership,
+          expectedRevision: snapshot.revision,
+        },
+      );
+      setState(result.state);
+      setSnapshot(result.snapshot);
+      setNotice(
+        "文件保存成功并已读回核对。请完全重启 Codex，在新会话确认服务商与模型。" +
+          plan.warnings.join(" "),
+      );
+    });
+  const previewProvider = (provider: Provider) => {
     try {
-      let result = structuredClone(draft);
-      if (!rawMode && result.authKind !== "official") result.settingsConfig.config = updateFormConfig(result.settingsConfig.config, { name: result.name, model: fields.model, baseUrl: fields.baseUrl, effort: fields.effort, envKey: result.authKind === "env" ? fields.envKey : undefined });
-      result = validateProvider(result);
-      setError(""); await onSave(result);
-    } catch (e) { setError(errorMessage(e)); }
+      if (!snapshot) throw new Error("请先读取当前配置。");
+      const plan = planApply(snapshot, provider);
+      setDialog({
+        title: "应用前预览",
+        body: (
+          <>
+            <p>
+              将修改：{plan.changedFields.join("、") || "内容已一致"}
+              。密钥已隐藏。
+            </p>
+            {plan.warnings.map((w) => (
+              <p key={w} className="inline-warning">
+                {w}
+              </p>
+            ))}
+            <pre className="code-view">{redactConfig(plan.config)}</pre>
+          </>
+        ),
+      });
+    } catch (e) {
+      setError(message(e));
+    }
   };
-  return <Modal title={provider.name ? "编辑服务商" : "添加服务商"} busy={busy} onClose={onClose}>
-    <div className="modal-body editor-body">
-      {(error || saveError) && <p role="alert" className="inline-warning">{error || saveError}</p>}
-      <label className="field"><span>名称 <em>*</em></span><input value={draft.name} maxLength={100} placeholder="例如：我的 API 服务" onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
-      <label className="field"><span>认证方式</span><select value={draft.authKind} onChange={e => changeKind(e.target.value as AuthKind)}><option value="apiKey">API Key · 原生 Responses</option><option value="official">Codex 已有官方登录</option><option value="env">Codex 进程环境变量</option><option value="none">无认证服务</option></select></label>
-      {draft.authKind === "official" && <p className="inline-info">切回 Codex 已有的官方登录。此处无法读取或切换钥匙串账号，登录需要在 Codex 中完成。</p>}
-      <div className="segmented editor-tabs"><button className={!rawMode ? "chosen" : ""} onClick={() => { try { setFields(formValues(draft)); setRawMode(false); setError(""); } catch (e) { setError(errorMessage(e)); } }}>基本设置</button><button className={rawMode ? "chosen" : ""} onClick={() => setRawMode(true)}>高级 TOML</button></div>
-      {!rawMode ? <>
-        {draft.authKind !== "official" && <label className="field"><span>服务地址</span><input type="url" inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="https://api.example.com/v1" value={fields.baseUrl} onChange={e => setField("baseUrl", e.target.value)} /><small>填写完整 API 基础地址，保留服务商要求的路径。</small></label>}
-        {draft.authKind === "apiKey" && <label className="field"><span>API Key</span><div className="password-field"><input type={visible ? "text" : "password"} autoComplete="off" autoCapitalize="none" spellCheck={false} value={fields.apiKey} placeholder="输入 API Key" onChange={e => setField("apiKey", e.target.value)} /><button type="button" className="icon-button" aria-label={visible ? "隐藏 API Key" : "显示 API Key"} onClick={() => setVisible(!visible)}>{visible ? <EyeOff /> : <Eye />}</button></div><small>方案密钥在本机加密保存。应用后写入 Codex 的服务商配置表。</small></label>}
-        {draft.authKind === "env" && <label className="field"><span>环境变量名</span><input value={fields.envKey} placeholder="CODEX_API_KEY" autoCapitalize="none" onChange={e => setField("envKey", e.target.value)} /><small>需要 Codex 宿主预先注入。本应用只能保存变量名。</small></label>}
-        {draft.authKind === "none" && <p className="inline-info">适用于明确无需认证的服务。不会发送 Codex 的官方登录凭据。</p>}
-        <label className="field"><span>模型</span><input value={fields.model} placeholder={draft.authKind === "official" ? "留空使用 Codex 默认值" : "服务商支持的模型名称"} autoCapitalize="none" spellCheck={false} onChange={e => setField("model", e.target.value)} /></label>
-        <label className="field"><span>推理强度</span><select value={fields.effort} onChange={e => setField("effort", e.target.value)}><option value="">Codex 默认</option>{["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"].map(value => <option key={value}>{value}</option>)}</select><small>可用档位由服务商和模型决定。</small></label>
-      </> : <label className="field"><span>供应商 config.toml</span><textarea className="toml-editor" rows={15} spellCheck={false} autoCapitalize="none" value={draft.settingsConfig.config} onChange={e => setDraft(editRawConfig(draft, e.target.value))} /><small>支持请求头、重试、上下文窗口、模型等原生参数。只投影服务商相关字段；模板中的 MCP、项目和用户设置不会覆盖现有配置。此编辑器可能含密钥。</small></label>}
-      {draft.authKind !== "official" && <label className="field"><span>保留官方登录界面</span><select value={draft.loginPolicy} onChange={e => setDraft({ ...draft, loginPolicy: e.target.value as Provider["loginPolicy"] })}><option value="auto">自动 · 按 auth.json 中的登录材料</option><option value="keep">启用 · 我已在 Codex 中登录</option><option value="omit">关闭</option></select><small>钥匙串登录无法自动确认。此设置不迁移或删除账号。</small></label>}
-      <label className="field"><span>备注</span><textarea rows={2} maxLength={2000} value={draft.notes ?? ""} placeholder="可选" onChange={e => setDraft({ ...draft, notes: e.target.value })} /></label>
-    </div><footer className="modal-footer"><button className="button" disabled={busy} onClick={onClose}><ArrowLeft /> 返回</button><button className="button primary" disabled={busy} onClick={submit}><Check /> 保存方案</button></footer>
-  </Modal>;
+  const importFile = () =>
+    action("选择导入文件…", async () => {
+      const file = await invoke<{ text: string }>("importFile");
+      const imported = importProviders(file.text);
+      if (imported.providers.length + state.providers.length > 200)
+        throw new Error("导入后超过 200 套方案限制。");
+      setDialog({
+        title: "导入供应商",
+        body: (
+          <>
+            <p>
+              添加 {imported.providers.map((p) => p.name).join("、")}
+              。已有方案保留。
+            </p>
+            {imported.warnings.map((w, i) => (
+              <p key={i}>{w}</p>
+            ))}
+          </>
+        ),
+        label: "导入",
+        confirm: async () => {
+          await saveProviders([...state.providers, ...imported.providers]);
+          setDialog(null);
+          setNotice("导入成功，请检查配置后应用。");
+        },
+      });
+    });
+  const restoreConfig = (id?: string) =>
+    setDialog({
+      title: "恢复配置",
+      body: (
+        <p>
+          恢复整个 config.toml，包括备份中的 MCP
+          和用户设置。先备份当前文件，再写入并核验。auth.json
+          与钥匙串保持原样；之后请重启 Codex。
+        </p>
+      ),
+      label: "备份当前并恢复",
+      danger: true,
+      confirm: async () => {
+        const live = await invoke<{ revision: string }>("readRevision");
+        const result = await invoke<{ state: AppState; snapshot: Snapshot }>(
+          id ? "restore" : "recover",
+          { id, expectedRevision: live.revision },
+        );
+        setState(result.state);
+        setSnapshot(result.snapshot);
+        setDialog(null);
+        setNotice("配置已恢复并读回核对。请重启 Codex。");
+      },
+    });
+  const restoreDocument = (id: string | undefined, path: string) =>
+    setDialog({
+      title: "恢复文档",
+      body: <p>将恢复 {path} 的完整内容，恢复前备份当前版本。</p>,
+      label: "恢复",
+      danger: true,
+      confirm: async () => {
+        const live = await invoke<{ hash: string }>("readDocumentRevision", {
+          path,
+        });
+        await invoke("restoreDocument", {
+          id,
+          path,
+          recover: !id,
+          expectedHash: live.hash,
+        });
+        setState(await invoke<AppState>("bootstrap"));
+        setPromptFile(null);
+        setDialog(null);
+        setNotice("文档已恢复并读回核对，请在 Codex 新会话中确认。");
+      },
+    });
+  const saveMcp = async (
+    name: string,
+    value: Record<string, any> | undefined,
+  ) => {
+    if (!snapshot) throw new Error("请先读取 config.toml。");
+    const config = changeMcp(snapshot.config ?? "", name, value);
+    const result = await invoke<{ state: AppState; snapshot: Snapshot }>(
+      "editMcp",
+      { config, expectedRevision: snapshot.revision },
+    );
+    setState(result.state);
+    setSnapshot(result.snapshot);
+    setMcpEditor(null);
+    setNotice("MCP 配置已保存并核验。请重启 Codex 以重新加载服务。");
+  };
+  const togglePrompt = (prompt: Prompt, enabled: boolean) => {
+    if (!promptFile) {
+      setError("请先授权目录并读取 AGENTS.md。");
+      return;
+    }
+    setDialog({
+      title: enabled ? "启用提示词" : "停用提示词",
+      body: (
+        <p>
+          {enabled
+            ? "将此提示词写入完整 AGENTS.md。现有文档先备份，可在设置 → 数据中恢复。"
+            : "将清空当前 AGENTS.md；清空前备份完整文档。"}
+          Codex 需要在新会话重新读取。
+        </p>
+      ),
+      label: enabled ? "备份并启用" : "备份并停用",
+      confirm: async () => {
+        const result = await invoke<TextDocument>("saveDocument", {
+          path: "AGENTS.md",
+          text: enabled ? prompt.content : "",
+          expectedHash: promptFile.hash,
+        });
+        setPromptFile(result);
+        setState(await invoke<AppState>("bootstrap"));
+        setDialog(null);
+        setNotice("AGENTS.md 已保存并核验。请新建 Codex 会话。");
+      },
+    });
+  };
+  const openSkill = (file: DocumentFile) =>
+    action("读取技能文档…", async () => {
+      const doc = await invoke<TextDocument>("readDocument", {
+        path: file.path,
+      });
+      setSkillEditor({
+        file: doc,
+        draft: doc.text ?? "",
+        folder: file.path.split("/").slice(1, -1).join("/"),
+        create: false,
+      });
+      try {
+        setSkillsMeta((current) => ({
+          ...current,
+          [file.path]: skillMetadata(doc.text ?? ""),
+        }));
+      } catch {}
+    });
+  const importSkill = () =>
+    action("选择 SKILL.md…", async () => {
+      const source = await invoke<{ text: string }>("importFile");
+      const meta = skillMetadata(source.text);
+      const folder =
+        meta.name
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 80) || "my-skill";
+      setSkillEditor({
+        file: { path: "", text: null, hash: "" },
+        draft: source.text,
+        folder,
+        create: true,
+      });
+    });
+  const openSession = (file: DocumentFile) =>
+    action("读取会话…", async () => {
+      const data = await invoke<SessionData>("readSession", {
+        path: file.path,
+      });
+      setSession({ file, parsed: parseSession(data) });
+    });
+  const scanUsage = () =>
+    action("扫描会话用量…", async () => {
+      const files = await invoke<Catalog>("catalog", { kind: "sessions" });
+      const rows: SessionSummary[] = [];
+      let errors = 0;
+      // A single explicit scan stays bounded; other files remain available in Sessions.
+      for (const [i, file] of files.files.slice(0, 50).entries()) {
+        setBusyLabel(
+          "扫描用量 " + (i + 1) + " / " + Math.min(files.files.length, 50),
+        );
+        try {
+          rows.push(
+            parseSession(
+              await invoke<SessionData>("readSession", {
+                path: file.path,
+                usageOnly: true,
+              }),
+            ),
+          );
+        } catch {
+          errors++;
+        }
+      }
+      setUsageRows(rows);
+      setUsageErrors(errors);
+      setUsageLimit(
+        files.truncated ||
+          files.files.length > 50 ||
+          rows.some((row) => row.partial),
+      );
+      setUsageScanned(true);
+    });
+  const setZoom = (value: number) =>
+    action("保存缩放…", async () => {
+      if (!Number.isFinite(value) || value < 50 || value > 400) {
+        setZoomInput(String(state.settings.zoom));
+        throw new Error("缩放范围为 50–400%。");
+      }
+      const next = await invoke<AppState>("settings", {
+        ...state.settings,
+        zoom: Math.round(value),
+      });
+      setState(next);
+      setZoomInput(String(next.settings.zoom));
+    });
+  const closeProvider = useCallback(() => setProviderEditor(null), []);
+  const filtered = state.providers.filter((p) =>
+    [p.name, p.notes, p.settingsConfig.config]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  const prompts = (state.prompts ?? []).filter((p) =>
+    [p.name, p.description]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  let summary: ReturnType<typeof readSummary> | null = null,
+    configError = "";
+  let mcps: ReturnType<typeof mcpServers> = [];
+  try {
+    if (snapshot) {
+      summary = readSummary(snapshot);
+      mcps = mcpServers(snapshot.config ?? "");
+    }
+  } catch (e) {
+    configError = message(e);
+  }
+  const Icon = view === "providers" ? null : PAGE_ICONS[view];
+  const grant = (
+    <Empty
+      icon={<FolderOpen size={28} />}
+      title="连接 Codex 配置目录"
+      action={
+        <Button onClick={authorize} disabled={busy}>
+          <FolderOpen size={16} /> 选择目录
+        </Button>
+      }
+    >
+      {picker?.message ??
+        "在系统文件选择器中选择 Codex → .codex，然后使用此文件夹。"}
+    </Empty>
+  );
+  const currentPrompt = (state.prompts ?? []).find(
+    (p) => p.content === promptFile?.text && p.content.length > 0,
+  );
+  const totals = aggregateUsage(usageRows);
+  const sessionNames = parseSessionIndex(catalog?.index ?? "");
+  const headerActions =
+    view === "providers" ? (
+      <>
+        <More
+          label="供应商操作"
+          items={[
+            {
+              label: "从当前配置导入",
+              disabled: !snapshot,
+              onClick: () => {
+                try {
+                  setProviderEditor(captureCurrent(snapshot!, "当前配置"));
+                } catch (e) {
+                  setError(message(e));
+                }
+              },
+            },
+            { label: "导入方案文件", onClick: importFile },
+            { label: "连接目录", onClick: authorize },
+          ]}
+        />
+        <Button
+          size="icon"
+          aria-label="添加供应商"
+          onClick={() => setProviderEditor(newProvider())}
+        >
+          <Plus size={18} />
+        </Button>
+      </>
+    ) : view === "mcp" ? (
+      <Button
+        size="icon"
+        aria-label="添加 MCP"
+        disabled={!snapshot || busy}
+        onClick={() =>
+          setMcpEditor({
+            name: "",
+            json: '{\n  "command": "npx",\n  "args": ["-y", "your-mcp-server"]\n}',
+          })
+        }
+      >
+        <Plus size={18} />
+      </Button>
+    ) : view === "prompts" ? (
+      <Button
+        size="icon"
+        aria-label="添加提示词"
+        onClick={() =>
+          setPromptEditor({
+            draft: {
+              id: crypto.randomUUID(),
+              name: "",
+              content: "",
+              updatedAt: Date.now(),
+            },
+          })
+        }
+      >
+        <Plus size={18} />
+      </Button>
+    ) : view === "skills" ? (
+      <Button
+        size="icon"
+        aria-label="导入技能"
+        disabled={!state.directory}
+        onClick={importSkill}
+      >
+        <Plus size={18} />
+      </Button>
+    ) : view === "usage" ? (
+      <Button
+        variant="neutral"
+        size="compact"
+        disabled={!state.directory || busy}
+        onClick={scanUsage}
+      >
+        <RefreshCw size={15} />
+        扫描
+      </Button>
+    ) : null;
+
+  return (
+    <div className="app-shell">
+      {mobileNav && (
+        <button
+          className="sidebar-scrim"
+          aria-label="关闭导航"
+          onClick={() => setMobileNav(false)}
+        />
+      )}
+      <div className={"sidebar-host " + (mobileNav ? "is-open" : "")}>
+        <Sidebar
+          activeApp="codex"
+          view={view}
+          settingsSection={section}
+          onSelectApp={() => navigate("providers")}
+          onSelectPage={navigate}
+          onSelectSettingsSection={(value) => {
+            setSection(value);
+            setMobileNav(false);
+          }}
+          onExitSettings={() => navigate("providers")}
+        />
+      </div>
+      <div id="content-area" className="content-area">
+        <AppPageHeader
+          className="android-page-header"
+          leading={
+            <Button
+              className="mobile-menu"
+              variant="quiet"
+              size="icon"
+              aria-label="打开导航"
+              onClick={() => setMobileNav(true)}
+            >
+              <Menu size={19} />
+            </Button>
+          }
+          icon={
+            view === "providers" ? (
+              <AppGlyph size={20} />
+            ) : Icon ? (
+              <Icon className="h-5 w-5" />
+            ) : null
+          }
+          title={session ? "会话" : PAGE_NAMES[view]}
+          subtitle={view === "providers" ? "供应商" : undefined}
+          variant={view === "providers" ? "app" : "page"}
+          actions={headerActions}
+        />
+        <main id="main-content" className="page-scroll" aria-busy={busy}>
+          {!ready && <p className="muted">正在读取本地数据…</p>}
+          {!state.native && (
+            <p className="preview-note">
+              浏览器预览 · 目录读写与加密保存需安装 APK
+            </p>
+          )}
+          {(error || configError) && (
+            <div className="notice error" role="alert">
+              <AlertTriangle size={18} />
+              <span>{error || configError}</span>
+              <Button
+                variant="quiet"
+                size="icon"
+                aria-label="关闭提示"
+                onClick={() => setError("")}
+              >
+                <X size={15} />
+              </Button>
+            </div>
+          )}
+          {notice && (
+            <div className="notice success" role="status">
+              <Check size={18} />
+              <span>{notice}</span>
+              <Button
+                variant="quiet"
+                size="icon"
+                aria-label="关闭通知"
+                onClick={() => setNotice("")}
+              >
+                <X size={15} />
+              </Button>
+            </div>
+          )}
+          {state.pendingRecovery && (
+            <div className="notice warning">
+              <AlertTriangle size={18} />
+              <span>配置有未确认写入，请先恢复。</span>
+              <Button variant="neutral" onClick={() => restoreConfig()}>
+                恢复
+              </Button>
+            </div>
+          )}
+          {view === "providers" && (
+            <>
+              <div className="page-toolbar">
+                <SegmentedControl
+                  aria-label="供应商视图"
+                  value={providerTab}
+                  onValueChange={setProviderTab}
+                  items={[
+                    { value: "list", label: "供应商" },
+                    { value: "current", label: "当前配置" },
+                  ]}
+                />
+                <Button
+                  variant="quiet"
+                  size="icon"
+                  aria-label="刷新当前配置"
+                  disabled={!state.directory || busy}
+                  onClick={() =>
+                    action("读取配置…", async () => {
+                      await refresh();
+                    })
+                  }
+                >
+                  <RefreshCw size={16} />
+                </Button>
+              </div>
+              {!state.directory ? (
+                <div className="connection-row">
+                  <FolderOpen size={17} />
+                  <span>尚未连接 Codex 目录</span>
+                  <Button variant="neutral" size="compact" onClick={authorize}>
+                    连接
+                  </Button>
+                </div>
+              ) : (
+                <div className="connection-row">
+                  <span className="status-dot" />
+                  <span>
+                    {state.directory.name}
+                    <small>
+                      {state.directory.isCodexProvider
+                        ? "Codex 文档提供方"
+                        : "普通 / 测试 SAF 目录"}
+                    </small>
+                  </span>
+                  <Button
+                    variant="quiet"
+                    size="icon"
+                    aria-label="查看目录授权"
+                    onClick={() => {
+                      navigate("settings");
+                      setSection("appConfig");
+                    }}
+                  >
+                    <ChevronRight size={16} />
+                  </Button>
+                </div>
+              )}
+              {providerTab === "list" ? (
+                <>
+                  <div className="search">
+                    <Search size={16} />
+                    <input
+                      aria-label="搜索供应商"
+                      placeholder="搜索供应商…"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                    />
+                  </div>
+                  {!filtered.length ? (
+                    <Empty
+                      icon={<AppGlyph size={32} />}
+                      title={
+                        query ? "没有匹配的供应商" : "添加你的第一个供应商"
+                      }
+                      action={
+                        !query ? (
+                          <Button
+                            variant="neutral"
+                            onClick={() => setProviderEditor(newProvider())}
+                          >
+                            <Plus size={16} />
+                            添加供应商
+                          </Button>
+                        ) : undefined
+                      }
+                    >
+                      管理服务地址、API Key 和模型，在保存的配置间切换。
+                    </Empty>
+                  ) : (
+                    <div className="provider-list">
+                      {filtered.map((provider) => {
+                        const values = formValues(provider);
+                        const match = snapshot
+                          ? matchProvider(snapshot, provider)
+                          : "none";
+                        return (
+                          <article
+                            className={
+                              "provider-row " +
+                              (match === "exact" ? "current" : "")
+                            }
+                            key={provider.id}
+                          >
+                            <div className="provider-identity">
+                              <span className="provider-glyph">
+                                {provider.authKind === "official" ? (
+                                  <AppGlyph size={21} />
+                                ) : (
+                                  <Server size={21} />
+                                )}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="row-title">
+                                  <strong>{provider.name}</strong>
+                                  {match === "exact" && (
+                                    <span className="badge success">
+                                      当前文件
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="truncate muted">
+                                  {values.baseUrl || "Codex 官方登录"}
+                                </p>
+                                <div className="row-meta">
+                                  <span>{values.model || "默认模型"}</span>
+                                  <span>
+                                    {provider.authKind === "apiKey"
+                                      ? "API Key"
+                                      : provider.authKind === "official"
+                                        ? "官方"
+                                        : "自定义认证"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="row-actions">
+                              <Button
+                                variant="neutral"
+                                size="compact"
+                                disabled={
+                                  busy ||
+                                  !snapshot ||
+                                  !!configError ||
+                                  state.pendingRecovery
+                                }
+                                onClick={() => applyProvider(provider)}
+                              >
+                                {match === "exact" ? <Check size={14} /> : null}
+                                {match === "exact" ? "已启用" : "启用"}
+                              </Button>
+                              <Button
+                                variant="quiet"
+                                size="icon"
+                                aria-label={"编辑 " + provider.name}
+                                disabled={busy}
+                                onClick={() => setProviderEditor(provider)}
+                              >
+                                <Pencil size={15} />
+                              </Button>
+                              <More
+                                label={provider.name + " 更多操作"}
+                                items={[
+                                  {
+                                    label: "预览修改",
+                                    disabled: !snapshot,
+                                    onClick: () => previewProvider(provider),
+                                  },
+                                  {
+                                    label: "复制配置",
+                                    onClick: () => {
+                                      setProviderEditor({
+                                        ...structuredClone(provider),
+                                        id: crypto.randomUUID(),
+                                        name: provider.name + " 副本",
+                                      });
+                                    },
+                                  },
+                                  {
+                                    label: "删除方案",
+                                    danger: true,
+                                    onClick: () =>
+                                      setDialog({
+                                        title: "删除供应商",
+                                        body: (
+                                          <p>
+                                            删除本地方案“{provider.name}”。当前
+                                            Codex 配置仍保留。
+                                          </p>
+                                        ),
+                                        label: "删除",
+                                        danger: true,
+                                        confirm: async () => {
+                                          await saveProviders(
+                                            state.providers.filter(
+                                              (p) => p.id !== provider.id,
+                                            ),
+                                          );
+                                          setDialog(null);
+                                        },
+                                      }),
+                                  },
+                                ]}
+                              />
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : !state.directory ? (
+                grant
+              ) : (
+                <>
+                  <Panel title="当前配置">
+                    {summary && snapshot ? (
+                      <>
+                        <dl className="details">
+                          <div>
+                            <dt>供应商</dt>
+                            <dd>{summary.providerId}</dd>
+                          </div>
+                          <div>
+                            <dt>模型</dt>
+                            <dd>{summary.model}</dd>
+                          </div>
+                          <div>
+                            <dt>认证存储</dt>
+                            <dd>{summary.auth.mode}</dd>
+                          </div>
+                          <div>
+                            <dt>运行中生效</dt>
+                            <dd>需重启后确认</dd>
+                          </div>
+                        </dl>
+                        <p className="muted">{summary.auth.state}</p>
+                        <Button
+                          variant="neutral"
+                          onClick={() => {
+                            try {
+                              setProviderEditor(
+                                captureCurrent(snapshot, "当前配置"),
+                              );
+                            } catch (e) {
+                              setError(message(e));
+                            }
+                          }}
+                        >
+                          保存为方案
+                        </Button>
+                      </>
+                    ) : (
+                      <p>请刷新当前配置。</p>
+                    )}
+                  </Panel>
+                  <Panel title="config.toml · 脱敏查看">
+                    <pre className="code-view">
+                      {snapshot?.config == null
+                        ? "文件尚不存在，启用供应商时创建。"
+                        : redactConfig(snapshot.config)}
+                    </pre>
+                  </Panel>
+                </>
+              )}
+              <p className="page-note">
+                文件写入成功后，请完全重启 Codex，并在新会话确认配置。
+              </p>
+            </>
+          )}
+          {view === "mcp" && (
+            <>
+              {!state.directory ? (
+                grant
+              ) : (
+                <>
+                  <div className="page-toolbar">
+                    <span className="muted">Codex · {mcps.length} 个服务</span>
+                    <Button
+                      variant="neutral"
+                      disabled={!snapshot || busy}
+                      onClick={() =>
+                        action("导入 MCP…", async () => {
+                          const file = await invoke<{ text: string }>(
+                            "importFile",
+                          );
+                          const entries = parseMcpImport(file.text);
+                          if (!snapshot) throw new Error("请刷新配置。");
+                          let config = snapshot.config ?? "";
+                          for (const [name, value] of entries) {
+                            if (mcps.some(([key]) => key === name))
+                              throw new Error(
+                                "MCP 名称已存在：" +
+                                  name +
+                                  "。请通过编辑修改，以免覆盖内置服务。",
+                              );
+                            config = changeMcp(config, name, value);
+                          }
+                          const target = config;
+                          setDialog({
+                            title: "导入 MCP",
+                            body: (
+                              <p>
+                                新增 {entries.map(([name]) => name).join("、")}
+                                ，保留所有已存在服务。
+                              </p>
+                            ),
+                            label: "导入",
+                            confirm: async () => {
+                              const result = await invoke<{
+                                state: AppState;
+                                snapshot: Snapshot;
+                              }>("editMcp", {
+                                config: target,
+                                expectedRevision: snapshot.revision,
+                              });
+                              setState(result.state);
+                              setSnapshot(result.snapshot);
+                              setDialog(null);
+                              setNotice("MCP 已导入并核验，请重启 Codex。");
+                            },
+                          });
+                        })
+                      }
+                    >
+                      <Upload size={15} />
+                      导入
+                    </Button>
+                    <Button
+                      variant="quiet"
+                      size="icon"
+                      aria-label="刷新 MCP"
+                      onClick={() =>
+                        action("读取 MCP…", async () => {
+                          await refresh();
+                        })
+                      }
+                    >
+                      <RefreshCw size={16} />
+                    </Button>
+                  </div>
+                  {mcps.length ? (
+                    <div className="list-panel">
+                      {mcps.map(([name, config]) => (
+                        <div className="list-row" key={name}>
+                          <Server size={20} />
+                          <div className="min-w-0 grow">
+                            <strong>{name}</strong>
+                            <p className="muted truncate">
+                              {config.command || config.url}
+                            </p>
+                            <span className="badge">
+                              {config.command ? "stdio" : "HTTP"}
+                            </span>
+                          </div>
+                          <Switch
+                            checked={config.enabled !== false}
+                            aria-label={"启用 " + name}
+                            disabled={busy}
+                            onCheckedChange={(checked) =>
+                              action("更新 MCP…", () =>
+                                saveMcp(name, { ...config, enabled: checked }),
+                              )
+                            }
+                          />
+                          <More
+                            label={name + " 操作"}
+                            items={[
+                              {
+                                label: "编辑",
+                                onClick: () =>
+                                  setMcpEditor({
+                                    original: name,
+                                    name,
+                                    json: JSON.stringify(config, null, 2),
+                                  }),
+                              },
+                              {
+                                label: "删除",
+                                danger: true,
+                                onClick: () =>
+                                  setDialog({
+                                    title: "删除 MCP",
+                                    body: (
+                                      <p>
+                                        从 config.toml 删除 {name}，可能影响
+                                        Codex 的工具能力。操作前自动备份。
+                                      </p>
+                                    ),
+                                    label: "删除",
+                                    danger: true,
+                                    confirm: async () => {
+                                      await saveMcp(name, undefined);
+                                      setDialog(null);
+                                    },
+                                  }),
+                              },
+                            ]}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <Empty icon={<Server size={28} />} title="尚无 MCP 服务">
+                      添加 stdio 或 HTTP 服务。命令由 Codex 环境执行。
+                    </Empty>
+                  )}
+                  <p className="page-note">
+                    显示授权目录中的完整 MCP
+                    列表；编辑某项时保留其他服务、模型和用户设置。OAuth 授权须在
+                    Codex 内完成。
+                  </p>
+                </>
+              )}
+            </>
+          )}
+          {view === "prompts" && (
+            <>
+              <div className="page-toolbar">
+                <span className="muted">Codex · AGENTS.md</span>
+                <Button
+                  variant="neutral"
+                  disabled={busy}
+                  onClick={() =>
+                    action("导入提示词…", async () => {
+                      const file = await invoke<{ text: string }>("importFile");
+                      setPromptEditor({
+                        draft: {
+                          id: crypto.randomUUID(),
+                          name: "导入的提示词",
+                          content: file.text,
+                          updatedAt: Date.now(),
+                        },
+                      });
+                    })
+                  }
+                >
+                  <Upload size={15} />
+                  导入
+                </Button>
+              </div>
+              {!state.directory && (
+                <div className="connection-row">
+                  <FolderOpen size={16} />
+                  <span>连接目录后可启用提示词</span>
+                  <Button variant="neutral" size="compact" onClick={authorize}>
+                    连接
+                  </Button>
+                </div>
+              )}
+              {state.directory && (
+                <Panel title="当前提示词">
+                  <p>
+                    {promptFile
+                      ? currentPrompt
+                        ? currentPrompt.name
+                        : promptFile.text
+                          ? "外部 / 自定义 AGENTS.md"
+                          : "尚未写入提示词"
+                      : "正在读取 AGENTS.md…"}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="neutral"
+                      disabled={!promptFile}
+                      onClick={() =>
+                        setDialog({
+                          title: "当前 AGENTS.md",
+                          body: (
+                            <pre className="code-view">
+                              {promptFile?.text ?? "文件不存在"}
+                            </pre>
+                          ),
+                        })
+                      }
+                    >
+                      查看
+                    </Button>
+                    <Button
+                      variant="neutral"
+                      disabled={!promptFile?.text}
+                      onClick={() =>
+                        setPromptEditor({
+                          draft: {
+                            id: crypto.randomUUID(),
+                            name: "从当前导入",
+                            content: promptFile?.text ?? "",
+                            updatedAt: Date.now(),
+                          },
+                        })
+                      }
+                    >
+                      保存到提示库
+                    </Button>
+                    <Button
+                      variant="quiet"
+                      size="icon"
+                      aria-label="刷新提示词"
+                      onClick={() =>
+                        action("读取 AGENTS.md…", async () =>
+                          setPromptFile(
+                            await invoke("readDocument", { path: "AGENTS.md" }),
+                          ),
+                        )
+                      }
+                    >
+                      <RefreshCw size={16} />
+                    </Button>
+                  </div>
+                </Panel>
+              )}
+              {prompts.length ? (
+                <ul className="list-panel prompt-list">
+                  {prompts.map((prompt, i) => (
+                    <PromptListItem
+                      key={prompt.id}
+                      id={prompt.id}
+                      prompt={prompt}
+                      active={currentPrompt?.id === prompt.id}
+                      detail={
+                        prompt.description ||
+                        prompt.content
+                          .split("\n")
+                          .find((line) => line.trim()) ||
+                        date(prompt.updatedAt)
+                      }
+                      first={i === 0}
+                      disabled={busy}
+                      onToggle={(_id, enabled) => togglePrompt(prompt, enabled)}
+                      onEdit={() =>
+                        setPromptEditor({ draft: structuredClone(prompt) })
+                      }
+                      onDelete={() =>
+                        setDialog({
+                          title: "删除提示词",
+                          body: <p>删除本地提示词“{prompt.name}”。</p>,
+                          label: "删除",
+                          danger: true,
+                          confirm: async () => {
+                            await savePrompts(
+                              (state.prompts ?? []).filter(
+                                (p) => p.id !== prompt.id,
+                              ),
+                            );
+                            setDialog(null);
+                          },
+                        })
+                      }
+                      deleteBlockedReason={
+                        currentPrompt?.id === prompt.id ? "请先停用" : undefined
+                      }
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <Empty icon={<BookOpen size={28} />} title="添加你的提示词">
+                  在多套 AGENTS.md 提示词之间切换，原文档可从备份恢复。
+                </Empty>
+              )}
+            </>
+          )}
+          {view === "skills" && (
+            <>
+              {!state.directory ? (
+                grant
+              ) : (
+                <>
+                  <div className="page-toolbar">
+                    <span className="muted">已安装 · Codex</span>
+                    <Button
+                      variant="quiet"
+                      size="icon"
+                      aria-label="刷新技能"
+                      disabled={busy}
+                      onClick={() =>
+                        action("扫描技能…", async () =>
+                          setCatalog(
+                            await invoke("catalog", { kind: "skills" }),
+                          ),
+                        )
+                      }
+                    >
+                      <RefreshCw size={16} />
+                    </Button>
+                  </div>
+                  {catalog?.truncated && (
+                    <p className="inline-warning">
+                      目录扫描达到数量或深度上限，仅展示部分技能。
+                    </p>
+                  )}
+                  {catalog?.files.length ? (
+                    <div className="list-panel">
+                      {catalog.files.map((file) => (
+                        <button
+                          className="list-row text-start w-full"
+                          key={file.path}
+                          onClick={() => openSkill(file)}
+                        >
+                          <SkillsIcon size={21} />
+                          <div className="grow min-w-0">
+                            <strong>
+                              {skillsMeta[file.path]?.name ??
+                                file.path.split("/").at(-2)}
+                            </strong>
+                            <p className="muted truncate">
+                              {skillsMeta[file.path]?.description ?? file.path}
+                            </p>
+                          </div>
+                          <span className="badge">
+                            {file.path.includes("/.system/")
+                              ? "内置"
+                              : "已安装"}
+                          </span>
+                          <ChevronRight size={16} />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <Empty
+                      icon={<SkillsIcon size={28} />}
+                      title={catalog ? "尚无技能" : "正在扫描技能…"}
+                    >
+                      通过右上角导入 SKILL.md。已安装技能的附属文件会保留。
+                    </Empty>
+                  )}
+                  <p className="page-note">
+                    本版支持目录浏览、用户 SKILL.md 编辑和单文档导入。包含脚本 /
+                    资源的技能包需由 Codex 安装；内置技能只读。
+                  </p>
+                </>
+              )}
+            </>
+          )}
+          {view === "sessions" && (
+            <>
+              {!state.directory ? (
+                grant
+              ) : session ? (
+                <>
+                  <Button variant="quiet" onClick={() => setSession(null)}>
+                    <ArrowLeft size={15} />
+                    返回会话
+                  </Button>
+                  <Panel
+                    title={sessionNames[session.parsed.id] || session.parsed.id}
+                  >
+                    <p className="muted break-word">
+                      {session.parsed.cwd} ·{" "}
+                      {session.parsed.model || "未记录模型"}
+                    </p>
+                    <small className="muted">{session.file.path}</small>
+                  </Panel>
+                  {session.parsed.partial && (
+                    <p className="inline-warning">
+                      此日志超过读取限制或存在未完成 /
+                      损坏的行，只展示已读部分。
+                    </p>
+                  )}
+                  {session.parsed.messages.length ? (
+                    session.parsed.messages.map((item, i) => (
+                      <article key={i} className={"message-row " + item.role}>
+                        <span>{item.role === "user" ? "你" : "Codex"}</span>
+                        <pre>{item.text}</pre>
+                      </article>
+                    ))
+                  ) : (
+                    <Empty
+                      icon={<History size={28} />}
+                      title="没有可展示的对话正文"
+                    >
+                      日志可能仅含工具事件或被截断。
+                    </Empty>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="page-toolbar">
+                    <span className="muted">Codex · 最近会话（只读）</span>
+                    <Button
+                      variant="quiet"
+                      size="icon"
+                      aria-label="刷新会话"
+                      onClick={() =>
+                        action("读取会话目录…", async () =>
+                          setCatalog(
+                            await invoke("catalog", { kind: "sessions" }),
+                          ),
+                        )
+                      }
+                    >
+                      <RefreshCw size={16} />
+                    </Button>
+                  </div>
+                  {catalog?.truncated && (
+                    <p className="inline-warning">
+                      最多显示最近 {catalog.limit}{" "}
+                      个日志；目录较大时结果可能不完整。
+                    </p>
+                  )}
+                  {catalog?.indexTruncated && (
+                    <p className="muted">名称索引过大，改用文件名显示。</p>
+                  )}
+                  <div className="search">
+                    <Search size={16} />
+                    <input
+                      aria-label="搜索会话"
+                      placeholder="搜索会话名称或路径…"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                    />
+                  </div>
+                  {catalog?.files.length ? (
+                    <div className="list-panel">
+                      {catalog.files
+                        .filter((file) =>
+                          (
+                            file.name +
+                            " " +
+                            sessionNames[
+                              file.name.match(
+                                /[0-9a-f]{8}-[0-9a-f-]{27,}/i,
+                              )?.[0] ?? ""
+                            ]
+                          )
+                            .toLowerCase()
+                            .includes(query.toLowerCase()),
+                        )
+                        .map((file) => {
+                          const id =
+                            file.name.match(
+                              /[0-9a-f]{8}-[0-9a-f-]{27,}/i,
+                            )?.[0] ?? "";
+                          return (
+                            <button
+                              key={file.path}
+                              className="list-row w-full text-start"
+                              onClick={() => openSession(file)}
+                            >
+                              <History size={19} />
+                              <div className="grow min-w-0">
+                                <strong className="truncate block">
+                                  {sessionNames[id] ||
+                                    file.name
+                                      .replace(/^rollout-/, "")
+                                      .replace(/\.jsonl$/, "")}
+                                </strong>
+                                <p className="muted">
+                                  {date(file.modified)}
+                                  {file.path.startsWith("archived")
+                                    ? " · 已归档"
+                                    : ""}
+                                </p>
+                              </div>
+                              <ChevronRight size={16} />
+                            </button>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <Empty
+                      icon={<History size={28} />}
+                      title={catalog ? "没有会话日志" : "正在读取会话…"}
+                    >
+                      读取 sessions 与 archived_sessions 目录中的 JSONL 文件。
+                    </Empty>
+                  )}
+                </>
+              )}
+            </>
+          )}
+          {view === "auth" && (
+            <>
+              <div className="page-toolbar">
+                <span className="muted">Codex 认证与服务商密钥</span>
+                <Button
+                  variant="quiet"
+                  size="icon"
+                  aria-label="刷新认证状态"
+                  disabled={!state.directory}
+                  onClick={() =>
+                    action("读取认证状态…", async () => {
+                      await refresh();
+                    })
+                  }
+                >
+                  <RefreshCw size={16} />
+                </Button>
+              </div>
+              <Panel title="Codex 官方登录">
+                <dl className="details">
+                  <div>
+                    <dt>目录状态</dt>
+                    <dd>{snapshot ? "已读取" : "尚未读取"}</dd>
+                  </div>
+                  <div>
+                    <dt>凭据存储</dt>
+                    <dd>{summary?.auth.mode ?? "未知"}</dd>
+                  </div>
+                  <div>
+                    <dt>当前认证</dt>
+                    <dd>
+                      {summary?.hasBearer
+                        ? "服务商 Bearer Token"
+                        : summary?.custom
+                          ? "自定义服务商"
+                          : "需在 Codex 确认"}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="muted">
+                  {summary?.auth.state ??
+                    "授权 .codex 目录后读取配置与 auth.json 的结构。"}
+                </p>
+                <p className="inline-info">
+                  钥匙串、OAuth 刷新及账号切换属于 Codex
+                  进程。目录授权无法访问钥匙串；文件中的登录材料也不等于运行中的登录状态。
+                </p>
+                <Button
+                  variant="neutral"
+                  onClick={() =>
+                    action("打开 Codex…", async () => {
+                      await invoke("openCodex");
+                    })
+                  }
+                >
+                  在 Codex 中管理登录
+                </Button>
+              </Panel>
+              <Panel title="服务商密钥">
+                <p>
+                  本地保存{" "}
+                  {
+                    state.providers.filter((p) => p.authKind === "apiKey")
+                      .length
+                  }{" "}
+                  套 API Key 方案。
+                </p>
+                <p className="muted">
+                  密钥由 Android Keystore
+                  加密保存。可在供应商编辑器中查看和修改。
+                </p>
+                <Button variant="neutral" onClick={() => navigate("providers")}>
+                  管理供应商
+                </Button>
+              </Panel>
+              <Panel title="MCP 授权">
+                <p className="muted">
+                  本版可管理 MCP 配置。MCP OAuth 登录、注销和令牌状态需要在
+                  Codex 授权中心中完成。
+                </p>
+              </Panel>
+            </>
+          )}
+          {view === "usage" && (
+            <>
+              {!state.directory ? (
+                grant
+              ) : (
+                <>
+                  <p className="page-note">
+                    扫描最近最多 50 个会话。以下为日志 Token
+                    快照，不是服务商账单、余额或完整请求数。
+                  </p>
+                  {!usageScanned ? (
+                    <Empty
+                      icon={<ChartColumn size={28} />}
+                      title="读取 Codex 用量"
+                      action={
+                        <Button
+                          variant="neutral"
+                          onClick={scanUsage}
+                          disabled={busy}
+                        >
+                          扫描日志
+                        </Button>
+                      }
+                    >
+                      按会话 ID 去重；派生会话含历史副本时从合计排除。
+                    </Empty>
+                  ) : (
+                    <>
+                      <div className="metrics">
+                        <div>
+                          <span>输入 Tokens</span>
+                          <strong>{number(totals.usage.input)}</strong>
+                        </div>
+                        <div>
+                          <span>输出 Tokens</span>
+                          <strong>{number(totals.usage.output)}</strong>
+                        </div>
+                        <div>
+                          <span>缓存输入</span>
+                          <strong>{number(totals.usage.cached)}</strong>
+                        </div>
+                        <div>
+                          <span>总 Tokens</span>
+                          <strong>{number(totals.usage.total)}</strong>
+                        </div>
+                      </div>
+                      <p className="muted">
+                        计入 {totals.counted} 个会话；排除{" "}
+                        {totals.excludedForks} 个派生会话。
+                        {usageErrors > 0
+                          ? " " + usageErrors + " 个日志读取失败。"
+                          : ""}
+                      </p>
+                      {usageLimit && (
+                        <p className="inline-warning">
+                          达到扫描上限或存在不完整日志，统计仅代表已读取部分。
+                        </p>
+                      )}
+                      <div className="list-panel">
+                        {usageRows.map((row, i) => (
+                          <div className="list-row" key={i}>
+                            <div className="min-w-0 grow">
+                              <strong className="truncate block">
+                                {row.model || row.id}
+                              </strong>
+                              <p className="muted">
+                                {row.usageSource}
+                                {row.forked ? " · 派生（未计入）" : ""}
+                              </p>
+                            </div>
+                            <span className="tabular-nums">
+                              {number(row.usage.total)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </>
+          )}
+          {view === "apps" && (
+            <Panel title="Codex">
+              <div className="list-row">
+                <AppGlyph size={26} />
+                <div className="grow">
+                  <strong>Codex Android</strong>
+                  <p className="muted">
+                    {picker?.codexProviderInstalled
+                      ? "检测到文档提供方"
+                      : "未检测到文档提供方"}
+                  </p>
+                </div>
+                <Button
+                  variant="neutral"
+                  onClick={() =>
+                    action("打开 Codex…", async () => {
+                      await invoke("openCodex");
+                    })
+                  }
+                >
+                  打开
+                </Button>
+              </div>
+              <p className="muted">
+                CC Switch 独立运行，通过系统授权目录管理 Codex 配置。
+              </p>
+            </Panel>
+          )}
+          {view === "settings" && (
+            <>
+              {section === "general" && (
+                <>
+                  <Panel title="界面缩放">
+                    <p className="muted">默认 130%，左右按钮每次调整 10%。</p>
+                    <div className="zoom-control">
+                      <Button
+                        variant="neutral"
+                        size="icon"
+                        aria-label="缩小 10%"
+                        disabled={busy || state.settings.zoom <= 50}
+                        onClick={() => setZoom(state.settings.zoom - 10)}
+                      >
+                        <Minus size={17} />
+                      </Button>
+                      <div>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          aria-label="缩放百分比"
+                          min={50}
+                          max={400}
+                          value={zoomInput}
+                          onChange={(e) => setZoomInput(e.target.value)}
+                          onBlur={() => {
+                            if (zoomInput !== String(state.settings.zoom))
+                              void setZoom(
+                                zoomInput.trim() ? Number(zoomInput) : NaN,
+                              );
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") e.currentTarget.blur();
+                          }}
+                        />
+                        <span>%</span>
+                      </div>
+                      <Button
+                        variant="neutral"
+                        size="icon"
+                        aria-label="放大 10%"
+                        disabled={busy || state.settings.zoom >= 400}
+                        onClick={() => setZoom(state.settings.zoom + 10)}
+                      >
+                        <Plus size={17} />
+                      </Button>
+                    </div>
+                    <Button
+                      variant="quiet"
+                      onClick={() => setZoom(130)}
+                      disabled={busy}
+                    >
+                      恢复 130%
+                    </Button>
+                  </Panel>
+                  <Panel title="外观">
+                    <SegmentedControl
+                      aria-label="外观"
+                      value={state.settings.theme}
+                      items={[
+                        { value: "light", label: "浅色", icon: Sun },
+                        { value: "dark", label: "深色", icon: Moon },
+                        { value: "system", label: "系统", icon: Smartphone },
+                      ]}
+                      onValueChange={(theme) =>
+                        action("保存外观…", async () =>
+                          setState(
+                            await invoke("settings", {
+                              ...state.settings,
+                              theme,
+                            }),
+                          ),
+                        )
+                      }
+                    />
+                    <p className="mt-4">
+                      语言{" "}
+                      <span className="float-right text-fg-2">简体中文</span>
+                    </p>
+                  </Panel>
+                </>
+              )}
+              {section === "appConfig" && (
+                <>
+                  <Panel title="Codex 配置目录">
+                    <p className="muted">{picker?.message}</p>
+                    <dl className="details">
+                      <div>
+                        <dt>系统 DocumentsUI</dt>
+                        <dd>{picker?.pickerAvailable ? "可用" : "未检测到"}</dd>
+                      </div>
+                      <div>
+                        <dt>Codex 文档提供方</dt>
+                        <dd>
+                          {picker?.codexProviderInstalled
+                            ? "已安装"
+                            : "未检测到"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>当前目录</dt>
+                        <dd>{state.directory?.name ?? "未选择"}</dd>
+                      </div>
+                    </dl>
+                    {state.directory && (
+                      <p className="muted break-word">
+                        {state.directory.authority} ·{" "}
+                        {state.directory.isCodexProvider
+                          ? "Codex 目录"
+                          : "普通 / 测试 SAF 目录"}
+                      </p>
+                    )}
+                    <Button
+                      variant="neutral"
+                      disabled={busy}
+                      onClick={authorize}
+                    >
+                      <FolderOpen size={16} />
+                      {state.directory ? "重新选择目录" : "选择目录"}
+                    </Button>
+                    <Button
+                      variant="quiet"
+                      disabled={busy}
+                      onClick={() =>
+                        action("检测提供方…", async () =>
+                          setPicker(await invoke("providerStatus")),
+                        )
+                      }
+                    >
+                      重新检测
+                    </Button>
+                    <p className="page-note">
+                      打开系统文件侧栏 → 选择 Codex → .codex →
+                      使用此文件夹。请勿选择 .codex 下的子目录。
+                    </p>
+                  </Panel>
+                  {state.directory && (
+                    <Button
+                      variant="quiet"
+                      onClick={() =>
+                        action("解除授权…", async () => {
+                          setState(await invoke("releaseDirectory"));
+                          setSnapshot(null);
+                          setPromptFile(null);
+                          setCatalog(null);
+                          setUsageScanned(false);
+                          setUsageRows([]);
+                        })
+                      }
+                    >
+                      解除目录授权
+                    </Button>
+                  )}
+                </>
+              )}
+              {section === "data" && (
+                <>
+                  <Panel title="导入与导出">
+                    <Button
+                      variant="neutral"
+                      disabled={busy}
+                      onClick={importFile}
+                    >
+                      <Upload size={15} />
+                      导入供应商
+                    </Button>
+                    <label className="checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={keysIncluded}
+                        onChange={(e) => setKeysIncluded(e.target.checked)}
+                      />
+                      导出包含 API Key（明文）
+                    </label>
+                    <Button
+                      variant="neutral"
+                      disabled={busy || !state.providers.length}
+                      onClick={() =>
+                        action("导出供应商…", async () => {
+                          await invoke("exportFile", {
+                            text: exportProviders(
+                              state.providers,
+                              keysIncluded,
+                            ),
+                          });
+                          setNotice(
+                            "方案已导出并读回核对。" +
+                              (keysIncluded
+                                ? "文件含明文密钥，请妥善保管。"
+                                : ""),
+                          );
+                        })
+                      }
+                    >
+                      <Download size={15} />
+                      导出供应商
+                    </Button>
+                  </Panel>
+                  <Panel title="配置备份 · 最近 10 次">
+                    <p className="muted">备份绑定授权目录，在本机加密保存。</p>
+                    {state.backups.length ? (
+                      state.backups.map((backup) => (
+                        <div className="list-row" key={backup.id}>
+                          <div className="grow min-w-0">
+                            <strong>{backup.reason}</strong>
+                            <p className="muted">{date(backup.createdAt)}</p>
+                          </div>
+                          <Button
+                            variant="neutral"
+                            size="compact"
+                            disabled={
+                              busy || backup.treeUri !== state.directory?.uri
+                            }
+                            onClick={() => restoreConfig(backup.id)}
+                          >
+                            恢复
+                          </Button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="muted">尚无备份。</p>
+                    )}
+                  </Panel>
+                  <Panel title="提示词 / 技能备份 · 最近 10 次">
+                    {(state.pendingDocuments ?? []).map((path) => (
+                      <div className="notice warning" key={path}>
+                        <span>{path} 写入未确认</span>
+                        <Button
+                          variant="neutral"
+                          onClick={() => restoreDocument(undefined, path)}
+                        >
+                          恢复
+                        </Button>
+                      </div>
+                    ))}
+                    {(state.documentBackups ?? []).map((backup) => (
+                      <div className="list-row" key={backup.id}>
+                        <div className="grow min-w-0">
+                          <strong className="break-word">{backup.path}</strong>
+                          <p className="muted">{date(backup.createdAt)}</p>
+                        </div>
+                        <Button
+                          variant="neutral"
+                          size="compact"
+                          disabled={
+                            busy || backup.treeUri !== state.directory?.uri
+                          }
+                          onClick={() =>
+                            restoreDocument(backup.id, backup.path)
+                          }
+                        >
+                          恢复
+                        </Button>
+                      </div>
+                    ))}
+                    {!state.documentBackups?.length && (
+                      <p className="muted">尚无文档备份。</p>
+                    )}
+                  </Panel>
+                </>
+              )}
+              {section === "about" && (
+                <Panel title="CC Switch Android">
+                  <div className="about-brand">
+                    <img src={logo} width={42} height={42} alt="CC Switch" />
+                    <div>
+                      <strong>CC Switch</strong>
+                      <p className="muted">0.2.0 · Android · Codex</p>
+                    </div>
+                  </div>
+                  <p className="muted">
+                    复用上游侧栏、页头、提示词行、控件、样式和图标。通过原生 SAF
+                    接口访问配置目录。
+                  </p>
+                  <Button
+                    variant="neutral"
+                    onClick={() =>
+                      setDialog({
+                        title: "开源许可",
+                        body: (
+                          <pre className="license-text">
+                            {thirdPartyNotices}
+                          </pre>
+                        ),
+                      })
+                    }
+                  >
+                    开源许可与版权
+                  </Button>
+                  <p className="page-note">
+                    CC Switch © 2025 Jason Young · MIT License
+                  </p>
+                </Panel>
+              )}
+            </>
+          )}
+        </main>
+        {busy && (
+          <div className="busy-bar" role="status">
+            <RefreshCw className="animate-spin" size={15} />
+            {busyLabel}
+          </div>
+        )}
+      </div>
+      {providerEditor && (
+        <ProviderEditor
+          provider={providerEditor}
+          onClose={closeProvider}
+          busy={busy}
+          saveError={error}
+          onSave={(provider) =>
+            action("保存供应商…", async () => {
+              const valid = validateProvider(provider);
+              await saveProviders(
+                state.providers.some((p) => p.id === valid.id)
+                  ? state.providers.map((p) => (p.id === valid.id ? valid : p))
+                  : [...state.providers, valid],
+              );
+              setProviderEditor(null);
+              setNotice("供应商方案已保存。启用后才会写入授权目录。");
+            })
+          }
+        />
+      )}
+      {mcpEditor && (
+        <Modal
+          title={mcpEditor.original ? "编辑 MCP" : "添加 MCP"}
+          busy={busy}
+          onClose={() => setMcpEditor(null)}
+        >
+          <div className="modal-body">
+            {error && <p className="inline-warning">{error}</p>}
+            <label className="field">
+              <span>名称</span>
+              <input
+                disabled={!!mcpEditor.original}
+                value={mcpEditor.name}
+                onChange={(e) =>
+                  setMcpEditor({ ...mcpEditor, name: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>MCP JSON</span>
+              <textarea
+                rows={13}
+                className="toml-editor"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={mcpEditor.json}
+                onChange={(e) =>
+                  setMcpEditor({ ...mcpEditor, json: e.target.value })
+                }
+              />
+              <small>
+                支持 command / args / env 或 url / http_headers，以及 Codex
+                支持的附加参数。命令在 Codex 环境执行。
+              </small>
+            </label>
+          </div>
+          <footer className="modal-footer">
+            <Button
+              variant="neutral"
+              disabled={busy}
+              onClick={() => setMcpEditor(null)}
+            >
+              取消
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() =>
+                action("保存 MCP…", async () => {
+                  if (
+                    !mcpEditor.original &&
+                    mcps.some(([name]) => name === mcpEditor.name)
+                  )
+                    throw new Error("该 MCP 名称已存在，请编辑原服务。");
+                  let value: any;
+                  try {
+                    value = JSON.parse(mcpEditor.json);
+                  } catch {
+                    throw new Error("JSON 格式错误。");
+                  }
+                  await saveMcp(mcpEditor.name, validateMcp(value));
+                })
+              }
+            >
+              保存
+            </Button>
+          </footer>
+        </Modal>
+      )}
+      {promptEditor && (
+        <Modal
+          title="编辑提示词"
+          busy={busy}
+          onClose={() => setPromptEditor(null)}
+        >
+          <div className="modal-body">
+            {error && <p className="inline-warning">{error}</p>}
+            <label className="field">
+              <span>名称</span>
+              <input
+                maxLength={100}
+                value={promptEditor.draft.name}
+                onChange={(e) =>
+                  setPromptEditor({
+                    draft: { ...promptEditor.draft, name: e.target.value },
+                  })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>说明</span>
+              <input
+                value={promptEditor.draft.description ?? ""}
+                onChange={(e) =>
+                  setPromptEditor({
+                    draft: {
+                      ...promptEditor.draft,
+                      description: e.target.value,
+                    },
+                  })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>提示词内容 · Markdown</span>
+              <textarea
+                rows={15}
+                value={promptEditor.draft.content}
+                onChange={(e) =>
+                  setPromptEditor({
+                    draft: { ...promptEditor.draft, content: e.target.value },
+                  })
+                }
+              />
+            </label>
+            <p className="muted">
+              保存到提示库。选择“启用”后才会写入 AGENTS.md。
+            </p>
+          </div>
+          <footer className="modal-footer">
+            <Button
+              variant="neutral"
+              disabled={busy || !promptEditor.draft.content}
+              onClick={() =>
+                action("导出提示词…", async () => {
+                  await invoke("exportFile", {
+                    text: promptEditor.draft.content,
+                    name: "AGENTS.md",
+                  });
+                  setNotice("提示词已导出。");
+                })
+              }
+            >
+              <Download size={15} />
+              导出
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() =>
+                action("保存提示词…", async () => {
+                  const draft = {
+                    ...promptEditor.draft,
+                    updatedAt: Date.now(),
+                  };
+                  if (!draft.name.trim() || !draft.content.trim())
+                    throw new Error("请输入名称和内容。");
+                  const all = state.prompts ?? [];
+                  await savePrompts(
+                    all.some((p) => p.id === draft.id)
+                      ? all.map((p) => (p.id === draft.id ? draft : p))
+                      : [...all, draft],
+                  );
+                  setPromptEditor(null);
+                })
+              }
+            >
+              保存
+            </Button>
+          </footer>
+        </Modal>
+      )}
+      {skillEditor && (
+        <Modal
+          title={skillEditor.create ? "导入技能" : "技能文档"}
+          busy={busy}
+          onClose={() => setSkillEditor(null)}
+        >
+          <div className="modal-body">
+            {error && <p className="inline-warning">{error}</p>}
+            {skillEditor.create && (
+              <label className="field">
+                <span>技能目录名</span>
+                <input
+                  value={skillEditor.folder}
+                  onChange={(e) =>
+                    setSkillEditor({ ...skillEditor, folder: e.target.value })
+                  }
+                />
+                <small>
+                  仅字母、数字、下划线、连字符；保存为 skills/目录名/SKILL.md。
+                </small>
+              </label>
+            )}
+            <p className="muted break-word">{skillEditor.file.path}</p>
+            <label className="field">
+              <span>SKILL.md</span>
+              <textarea
+                rows={18}
+                className="toml-editor"
+                readOnly={
+                  !skillEditor.create &&
+                  !/^skills\/[A-Za-z0-9_-]{1,80}\/SKILL\.md$/.test(
+                    skillEditor.file.path,
+                  )
+                }
+                value={skillEditor.draft}
+                onChange={(e) =>
+                  setSkillEditor({ ...skillEditor, draft: e.target.value })
+                }
+              />
+            </label>
+            <p className="muted">
+              此处不会执行技能内的命令。保存后在 Codex 新会话确认加载。
+            </p>
+          </div>
+          <footer className="modal-footer">
+            <Button
+              variant="neutral"
+              disabled={busy}
+              onClick={() => setSkillEditor(null)}
+            >
+              关闭
+            </Button>
+            <Button
+              disabled={
+                busy ||
+                (!skillEditor.create &&
+                  !/^skills\/[A-Za-z0-9_-]{1,80}\/SKILL\.md$/.test(
+                    skillEditor.file.path,
+                  ))
+              }
+              onClick={() =>
+                action("保存技能…", async () => {
+                  skillMetadata(skillEditor.draft);
+                  const target = skillEditor.create
+                    ? "skills/" + skillEditor.folder + "/SKILL.md"
+                    : skillEditor.file.path;
+                  if (!/^skills\/[A-Za-z0-9_-]{1,80}\/SKILL\.md$/.test(target))
+                    throw new Error("技能目录名无效。");
+                  const before = skillEditor.create
+                    ? await invoke<TextDocument>("readDocument", {
+                        path: target,
+                      })
+                    : skillEditor.file;
+                  if (skillEditor.create && before.text !== null)
+                    throw new Error("该技能已存在，请从列表打开后编辑。");
+                  await invoke("saveDocument", {
+                    path: target,
+                    text: skillEditor.draft,
+                    expectedHash: before.hash,
+                  });
+                  setState(await invoke("bootstrap"));
+                  setCatalog(await invoke("catalog", { kind: "skills" }));
+                  setSkillEditor(null);
+                  setNotice("技能文档已保存并读回核对。");
+                })
+              }
+            >
+              保存
+            </Button>
+          </footer>
+        </Modal>
+      )}
+      {dialog && (
+        <Modal title={dialog.title} busy={busy} onClose={() => setDialog(null)}>
+          <div className="modal-body">
+            {error && <p className="inline-warning">{error}</p>}
+            {dialog.body}
+          </div>
+          <footer className="modal-footer">
+            <Button
+              variant="neutral"
+              disabled={busy}
+              onClick={() => setDialog(null)}
+            >
+              {dialog.confirm ? "取消" : "关闭"}
+            </Button>
+            {dialog.confirm && (
+              <Button
+                variant={dialog.danger ? "destructive" : "solid"}
+                disabled={busy}
+                onClick={() => action("正在处理…", dialog.confirm!)}
+              >
+                {dialog.label ?? "确认"}
+              </Button>
+            )}
+          </footer>
+        </Modal>
+      )}
+    </div>
+  );
 }

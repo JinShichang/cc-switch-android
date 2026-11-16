@@ -49,8 +49,19 @@ final class EncryptedRepository {
         } else {
             data = new JSONObject().put("providers", new JSONArray()).put("backups", new JSONArray())
                 .put("journals", new JSONObject()).put("ownership", new JSONObject())
-                .put("settings", new JSONObject().put("zoom", 200).put("theme", "system"));
+                .put("settings", new JSONObject().put("zoom", 130).put("theme", "system"));
         }
+    }
+    void migrate() throws Exception {
+        JSONObject next = copy();
+        boolean changed = false;
+        if (data.optInt("schemaVersion", 1) < 2) {
+            next.getJSONObject("settings").put("zoom", 130);
+            next.put("schemaVersion", 2); changed = true;
+        }
+        for (String key : new String[] { "prompts", "documentBackups" }) if (!next.has(key)) { next.put(key, new JSONArray()); changed = true; }
+        if (!next.has("documentJournals")) { next.put("documentJournals", new JSONObject()); changed = true; }
+        if (changed) replace(next);
     }
     JSONObject copy() throws Exception { return new JSONObject(data.toString()); }
     void replace(JSONObject next) throws Exception {

@@ -56,49 +56,104 @@ final class TreeAccess implements TransactionEngine.Port {
             .put("isCodexProvider", "com.ai.codex".equals(packageName))
             .put("canWrite", (flags & DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE) != 0);
     }
-    private Uri child(String name, boolean needWrite) throws Exception {
-        if (!name.equals("config.toml") && !name.equals("auth.json")) throw new IllegalArgumentException("Unsupported document");
-        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, rootId);
+    static void validPath(String relative) throws AppFailure {
+        if (relative == null || relative.isEmpty() || relative.length() > 1024 || relative.startsWith("/") || relative.contains("\\")) throw new AppFailure("invalid_path", "文档路径无效。");
+        for (String part : relative.split("/", -1)) if (part.isEmpty() || part.equals(".") || part.equals("..") || part.indexOf('\0') >= 0) throw new AppFailure("invalid_path", "文档路径必须位于已授权目录内。");
+    }
+    private Uri root() { return DocumentsContract.buildDocumentUriUsingTree(tree, rootId); }
+    private Uri findChild(Uri parent, String name, boolean directory, boolean writable) throws Exception {
+        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getDocumentId(parent));
         Uri found = null;
         try (Cursor cursor = resolver.query(children, new String[] { DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_FLAGS }, null, null, null)) {
-            if (cursor == null) throw new AppFailure("directory_unavailable", "无法列出授权目录，请检查提供方是否运行及目录权限。");
+            if (cursor == null) throw new AppFailure("directory_unavailable", "无法列出授权目录，请检查文档提供方和权限。");
             while (cursor.moveToNext()) {
                 if (!name.equals(cursor.getString(1))) continue;
-                if (found != null) throw new AppFailure("ambiguous_file", "目录内有重名配置文件，无法确定写入对象。请整理后重试。");
-                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(cursor.getString(2))) throw new AppFailure("wrong_file_type", name + " 是目录，无法作为配置文件读取。");
-                if (needWrite && (cursor.getInt(3) & DocumentsContract.Document.FLAG_SUPPORTS_WRITE) == 0) throw new AppFailure("read_only", "config.toml 为只读文件，请检查 DocumentsProvider 提供的写入权限。");
+                if (found != null) throw new AppFailure("ambiguous_file", "目录内有重名文档，无法确定操作对象。");
+                if (directory != DocumentsContract.Document.MIME_TYPE_DIR.equals(cursor.getString(2))) throw new AppFailure("wrong_file_type", "文档的文件 / 目录类型不符合预期。");
+                if (writable && (cursor.getInt(3) & DocumentsContract.Document.FLAG_SUPPORTS_WRITE) == 0) throw new AppFailure("read_only", "目标文档只读，请检查提供方写入权限。");
                 found = DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0));
             }
         }
         return found;
     }
-    byte[] auth() throws Exception {
-        Uri uri = child("auth.json", false);
-        return uri == null ? null : readUri(resolver, uri, MAX_CONFIG);
-    }
-    @Override public byte[] read() throws Exception {
-        Uri uri = child("config.toml", false);
-        return uri == null ? null : readUri(resolver, uri, MAX_CONFIG);
-    }
-    @Override public void write(byte[] bytes) throws Exception {
-        if (bytes.length > MAX_CONFIG) throw new AppFailure("too_large", "config.toml 超过 2 MB 限制。");
-        Uri target = child("config.toml", true);
-        if (target == null) {
-            if (!info().getBoolean("canWrite")) throw new AppFailure("cannot_create", "授权目录不允许创建 config.toml。请检查提供方的创建权限。");
-            Uri root = DocumentsContract.buildDocumentUriUsingTree(tree, rootId);
-            target = DocumentsContract.createDocument(resolver, root, "application/toml", "config.toml");
-            if (target == null) throw new AppFailure("create_failed", "DocumentsProvider 没有创建 config.toml。");
-            Uri resolved = child("config.toml", true);
-            if (resolved == null || !DocumentsContract.getDocumentId(target).equals(DocumentsContract.getDocumentId(resolved))) {
-                throw new AppFailure("create_renamed", "DocumentsProvider 改变了新文件名称，无法确认 config.toml。请检查授权目录。");
+    private Uri locate(String relative, boolean directory, boolean createParents) throws Exception {
+        validPath(relative);
+        String[] parts = relative.split("/");
+        Uri current = root();
+        for (int i = 0; i < parts.length; i++) {
+            boolean isDirectory = i < parts.length - 1 || directory;
+            Uri found = findChild(current, parts[i], isDirectory, false);
+            if (found == null && createParents && isDirectory) {
+                found = DocumentsContract.createDocument(resolver, current, DocumentsContract.Document.MIME_TYPE_DIR, parts[i]);
+                Uri checked = findChild(current, parts[i], true, false);
+                if (found == null || checked == null || !DocumentsContract.getDocumentId(found).equals(DocumentsContract.getDocumentId(checked))) throw new AppFailure("create_failed", "未能按预期名称创建子目录。");
             }
+            if (found == null) return null;
+            current = found;
+        }
+        return current;
+    }
+    org.json.JSONArray list(String relative, int limit) throws Exception {
+        Uri directory = relative.isEmpty() ? root() : locate(relative, true, false);
+        org.json.JSONArray entries = new org.json.JSONArray();
+        if (directory == null) return entries;
+        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getDocumentId(directory));
+        try (Cursor cursor = resolver.query(children, new String[] { DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_SIZE, DocumentsContract.Document.COLUMN_LAST_MODIFIED }, null, null, null)) {
+            if (cursor == null) throw new AppFailure("directory_unavailable", "无法列出文档目录。");
+            while (cursor.moveToNext()) {
+                String name = cursor.getString(0);
+                if (name == null || name.contains("/") || name.contains("\\") || name.equals(".") || name.equals("..")) continue;
+                if (entries.length() >= limit) throw new AppFailure("scan_limit", "目录项过多，已停止扫描。请按日期整理会话目录后重试。");
+                entries.put(new JSONObject().put("name", name).put("path", relative.isEmpty() ? name : relative + "/" + name)
+                    .put("directory", DocumentsContract.Document.MIME_TYPE_DIR.equals(cursor.getString(1)))
+                    .put("size", cursor.isNull(2) ? -1 : cursor.getLong(2)).put("modified", cursor.isNull(3) ? 0 : cursor.getLong(3)));
+            }
+        }
+        return entries;
+    }
+    byte[] readFile(String relative) throws Exception {
+        Uri uri = locate(relative, false, false);
+        return uri == null ? null : readUri(resolver, uri, MAX_CONFIG);
+    }
+    InputStream openFile(String relative) throws Exception {
+        Uri uri = locate(relative, false, false);
+        if (uri == null) throw new AppFailure("file_missing", "文档已不存在，请刷新列表。");
+        InputStream stream = resolver.openInputStream(uri);
+        if (stream == null) throw new AppFailure("read_failed", "无法打开文档读取流。");
+        return stream;
+    }
+    private void writeFile(String relative, byte[] bytes) throws Exception {
+        validPath(relative);
+        if (bytes.length > MAX_CONFIG) throw new AppFailure("too_large", "文档超过 2 MB 限制。");
+        int slash = relative.lastIndexOf('/');
+        Uri parent = slash < 0 ? root() : locate(relative.substring(0, slash), true, true);
+        if (parent == null) throw new AppFailure("directory_unavailable", "目标父目录不存在。");
+        String name = relative.substring(slash + 1);
+        Uri target = findChild(parent, name, false, true);
+        if (target == null) {
+            target = DocumentsContract.createDocument(resolver, parent, relative.endsWith(".toml") ? "application/toml" : "text/plain", name);
+            Uri checked = findChild(parent, name, false, true);
+            if (target == null || checked == null || !DocumentsContract.getDocumentId(target).equals(DocumentsContract.getDocumentId(checked))) throw new AppFailure("create_renamed", "文档提供方改变了文件名称，未确认写入成功。");
         }
         writeUri(resolver, target, bytes);
     }
-    @Override public void delete() throws Exception {
-        Uri target = child("config.toml", false);
-        if (target != null && !DocumentsContract.deleteDocument(resolver, target)) throw new AppFailure("delete_failed", "无法恢复“原文件不存在”的状态：提供方未允许删除 config.toml。");
+    private void deleteFile(String relative) throws Exception {
+        Uri target = locate(relative, false, false);
+        if (target != null && !DocumentsContract.deleteDocument(resolver, target)) throw new AppFailure("delete_failed", "提供方未允许删除文档。");
     }
+    TransactionEngine.Port port(String relative) throws Exception {
+        validPath(relative);
+        if (!relative.equals("AGENTS.md") && !relative.matches("skills/[A-Za-z0-9_-]{1,80}/SKILL\\.md")) throw new AppFailure("write_scope", "本版本仅修改 config.toml、AGENTS.md 和用户技能 SKILL.md。");
+        return new TransactionEngine.Port() {
+            @Override public byte[] read() throws Exception { return readFile(relative); }
+            @Override public void write(byte[] bytes) throws Exception { writeFile(relative, bytes); }
+            @Override public void delete() throws Exception { deleteFile(relative); }
+        };
+    }
+    byte[] auth() throws Exception { return readFile("auth.json"); }
+    @Override public byte[] read() throws Exception { return readFile("config.toml"); }
+    @Override public void write(byte[] bytes) throws Exception { writeFile("config.toml", bytes); }
+    @Override public void delete() throws Exception { deleteFile("config.toml"); }
     static byte[] readUri(ContentResolver resolver, Uri uri, int limit) throws Exception {
         try (InputStream stream = resolver.openInputStream(uri)) {
             if (stream == null) throw new AppFailure("read_failed", "DocumentsProvider 无法打开读取流。");

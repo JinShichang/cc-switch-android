@@ -49,6 +49,7 @@ public final class MainActivity extends Activity {
     private EncryptedRepository repository;
     private Call pickerCall;
     private String exportText;
+    private String exportName = "cc-switch-codex.json", exportMime = "application/json";
     private boolean destroyed;
 
     private static final class Call {
@@ -143,11 +144,17 @@ public final class MainActivity extends Activity {
 
     private void handle(Call call, String method, JSONObject args) {
         try {
-            if (repository == null) repository = new EncryptedRepository(this);
+            if (repository == null) { EncryptedRepository candidate = new EncryptedRepository(this); candidate.migrate(); repository = candidate; }
             Object result;
             switch (method) {
                 case "bootstrap": result = state(); break;
                 case "readCurrent": result = snapshot(tree()); break;
+                case "providerStatus": result = DocumentPicker.status(this); break;
+                case "openCodex":
+                    Intent codex = getPackageManager().getLaunchIntentForPackage("com.ai.codex");
+                    if (codex == null) throw new AppFailure("codex_missing", "未安装可打开的 Codex 应用。");
+                    runOnUiThread(() -> startActivity(codex));
+                    result = new JSONObject().put("opened", true); break;
                 case "readRevision":
                     TreeAccess revisionAccess = tree();
                     result = new JSONObject().put("revision", TransactionEngine.revision(revisionAccess.read(), revisionAccess.auth()));
@@ -157,6 +164,9 @@ public final class MainActivity extends Activity {
                 case "exportFile":
                     String text = args.getString("text");
                     if (text.getBytes(StandardCharsets.UTF_8).length > 16 * 1024 * 1024) throw new AppFailure("too_large", "导出文件超过 16 MB 限制。");
+                    exportName = args.optString("name", "cc-switch-codex.json");
+                    if (!exportName.matches("[A-Za-z0-9._-]{1,100}")) throw new AppFailure("invalid_export_name", "导出文件名无效。");
+                    exportMime = exportName.endsWith(".md") ? "text/markdown" : "application/json";
                     launchPicker(call, EXPORT_PICKER, text); return;
                 case "releaseDirectory":
                     String saved = preferences.getString("uri", "");
@@ -188,6 +198,31 @@ public final class MainActivity extends Activity {
                     repository.replace(updated);
                     updateBars(theme);
                     result = state(); break;
+                case "savePrompts":
+                    JSONArray prompts = args.getJSONArray("prompts");
+                    if (prompts.length() > 100) throw new AppFailure("prompt_limit", "最多保存 100 套提示词。");
+                    Set<String> promptIds = new HashSet<>();
+                    for (int i = 0; i < prompts.length(); i++) {
+                        JSONObject prompt = prompts.getJSONObject(i);
+                        if (!promptIds.add(prompt.getString("id")) || prompt.getString("name").trim().isEmpty() || prompt.getString("content").getBytes(StandardCharsets.UTF_8).length > TreeAccess.MAX_CONFIG) throw new AppFailure("invalid_prompt", "提示词结构或大小无效。");
+                    }
+                    JSONObject promptData = repository.copy(); promptData.put("prompts", prompts); repository.replace(promptData);
+                    result = state(); break;
+                case "catalog": result = new DocumentCatalog(tree()).catalog(args.getString("kind")); break;
+                case "readDocument": result = new DocumentCatalog(tree()).document(args.getString("path")); break;
+                case "readDocumentRevision": result = new JSONObject().put("hash", TransactionEngine.hash(tree().port(args.getString("path")).read())); break;
+                case "readSession": result = new DocumentCatalog(tree()).session(args.getString("path"), args.optBoolean("usageOnly")); break;
+                case "saveDocument": result = new DocumentStore(tree(), repository).save(args); break;
+                case "restoreDocument": result = new DocumentStore(tree(), repository).restore(args); break;
+                case "editMcp":
+                    TreeAccess mcpAccess = tree();
+                    JSONObject mcpData = repository.copy();
+                    if (mcpData.getJSONObject("journals").has(mcpAccess.tree.toString())) throw new AppFailure("pending_recovery", "请先恢复未确认的配置写入。");
+                    JSONObject mcpOwnership = mcpData.getJSONObject("ownership").optJSONObject(mcpAccess.tree.toString());
+                    byte[] mcpConfig = args.getString("config").getBytes(StandardCharsets.UTF_8);
+                    if (mcpConfig.length > TreeAccess.MAX_CONFIG) throw new AppFailure("too_large", "配置超过 2 MB 限制。");
+                    writeConfig(mcpAccess, mcpConfig, args.getString("expectedRevision"), mcpOwnership == null ? new JSONObject() : mcpOwnership, "mcp", "修改 MCP 配置");
+                    result = new JSONObject().put("state", state()).put("snapshot", snapshot(mcpAccess)); break;
                 case "apply": result = apply(args); break;
                 case "restore": result = restore(args, false); break;
                 case "recover": result = restore(args, true); break;
@@ -232,12 +267,24 @@ public final class MainActivity extends Activity {
             item.remove("ownership");
             backups.put(item);
         }
+        JSONArray documentBackups = new JSONArray();
+        JSONArray storedDocs = data.getJSONArray("documentBackups");
+        for (int i = storedDocs.length() - 1; i >= 0; i--) {
+            JSONObject item = new JSONObject(storedDocs.getJSONObject(i).toString()); item.remove("content"); documentBackups.put(item);
+        }
+        JSONArray pendingDocuments = new JSONArray();
+        java.util.Iterator<String> pendingKeys = data.getJSONObject("documentJournals").keys();
+        while (pendingKeys.hasNext()) {
+            JSONObject item = data.getJSONObject("documentJournals").getJSONObject(pendingKeys.next());
+            if (item.getString("treeUri").equals(uri)) pendingDocuments.put(item.getString("path"));
+        }
         JSONObject settings = data.getJSONObject("settings");
         updateBars(settings.optString("theme", "system"));
         return new JSONObject().put("providers", data.getJSONArray("providers")).put("backups", backups)
             .put("directory", directory == null ? JSONObject.NULL : directory).put("settings", settings).put("native", true)
             .put("pendingRecovery", data.getJSONObject("journals").has(uri))
-            .put("lastApplied", data.opt("lastApplied"));
+            .put("lastApplied", data.opt("lastApplied")).put("prompts", data.getJSONArray("prompts"))
+            .put("documentBackups", documentBackups).put("pendingDocuments", pendingDocuments);
     }
 
     private Object apply(JSONObject args) throws Exception {
@@ -345,17 +392,17 @@ public final class MainActivity extends Activity {
             try {
                 Intent intent;
                 if (type == TREE_PICKER) {
-                    intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(GRANTS | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+                    intent = DocumentPicker.intent(this, Intent.ACTION_OPEN_DOCUMENT_TREE, preferences.getString("uri", ""));
                 } else if (type == IMPORT_PICKER) {
-                    intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    intent = DocumentPicker.intent(this, Intent.ACTION_OPEN_DOCUMENT, "");
                 } else {
-                    intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/json")
-                        .putExtra(Intent.EXTRA_TITLE, "cc-switch-codex.json").addFlags(GRANTS);
+                    intent = DocumentPicker.intent(this, Intent.ACTION_CREATE_DOCUMENT, "").setType(exportMime)
+                        .putExtra(Intent.EXTRA_TITLE, exportName).addFlags(GRANTS);
                 }
                 startActivityForResult(intent, type);
             } catch (Exception error) {
                 pickerCall = null; exportText = null;
-                failure(call, new AppFailure("picker_unavailable", "无法打开系统文件选择器，请检查系统 DocumentsUI 是否可用。"));
+                failure(call, error instanceof AppFailure ? error : new AppFailure("picker_unavailable", "无法打开系统 DocumentsUI，请检查系统“文件”组件是否已启用。"));
             }
         });
     }
@@ -377,6 +424,10 @@ public final class MainActivity extends Activity {
                     getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                     TreeAccess access = new TreeAccess(this, uri);
                     JSONObject info = access.info();
+                    if (info.optBoolean("isCodexProvider") && !info.optString("name").equals(".codex")) {
+                        if (!uri.toString().equals(preferences.getString("uri", ""))) getContentResolver().releasePersistableUriPermission(uri, GRANTS);
+                        throw new AppFailure("wrong_codex_root", "请选择 Codex 提供的整个 .codex 目录，不能选择它下面的子目录。");
+                    }
                     String previousUri = preferences.getString("uri", "");
                     if (!preferences.edit().putString("uri", uri.toString()).putString("name", info.getString("name")).commit()) throw new AppFailure("preferences_write", "无法保存持久目录授权。");
                     if (!previousUri.isEmpty() && !previousUri.equals(uri.toString())) {
