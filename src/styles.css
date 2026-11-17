@@ -627,7 +627,8 @@ button:disabled {
   color: var(--text-1);
   box-shadow: var(--shadow-sm);
 }
-@media (max-width: 760px) {
+@media (max-width: 760px),
+  (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   :root {
     --h-nav-row: 36px;
     --h-control: 34px;
@@ -847,5 +848,52 @@ button:disabled {
   }
   .mobile-upstream-page .group .pointer-events-none.absolute.end-0 {
     display: none;
+  }
+}
+
+/* User-controlled phone rotation: give the original pages the full landscape
+ * width. Keep navigation as a drawer and every table/chart independently scrollable. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .page-scroll {
+    padding: 8px 12px 16px;
+  }
+  .android-page-header {
+    min-height: 44px;
+  }
+  .mobile-upstream-page {
+    height: auto;
+    min-height: calc(var(--app-height, 100dvh) - 76px);
+  }
+  .mobile-upstream-page > :last-child {
+    min-height: calc(var(--app-height, 100dvh) - 120px);
+  }
+  .mobile-upstream-page header {
+    min-height: 44px;
+    height: auto;
+    padding: 6px 12px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .mobile-upstream-page [class*="px-6"] {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .mobile-provider {
+    padding: 12px;
+  }
+  .mobile-provider .cm-editor {
+    min-height: 220px;
+  }
+  [role="dialog"] {
+    max-width: calc(100vw - 24px);
+    max-height: min(
+      calc(var(--app-height, 100dvh) - 16px),
+      var(--radix-popover-content-available-height, 100dvh)
+    );
+    overflow: auto;
+  }
+  [data-radix-popper-content-wrapper] [role="menu"] {
+    max-height: var(--radix-popper-available-height, calc(100dvh - 16px));
+    overflow-y: auto;
   }
 }

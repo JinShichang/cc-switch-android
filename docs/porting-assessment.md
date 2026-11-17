@@ -53,3 +53,7 @@
 Codex 自定义表单、会话和用量页面继续直接复用 src/vendor 组件。本轮改动只修正手机标签、CodeMirror 滚动/语法和浮层高度。此前 Android 用量适配过度简化，现从上游 services/session_usage_codex.rs 和 codex_rollout_file.rs 移植核心规则到 src/upstream/codexUsage.ts 与 SessionLogReader.java，保留 MIT 来源。SAF 负责文档流、Java 提供原始字节投影，TypeScript 实现统计纯逻辑。
 
 并非整个 Tauri 后端可原样运行：本地文件路径、桌面钥匙串、SQLite 事务和桌面 IPC 仍需 Android 实现。使用原组件不代表所有宿主功能已联调；父历史边界不可验证时明确暂缓，而不是假设或重复累计。
+
+## 0.3.2 上游编辑器和首次初始化
+
+上游默认模板也是 8 行。桌面添加页通过 codex_editor::view 把模板投影到当前文件；此前 Android 漏接该流程，现补上完整 live 展示、全局改动三方比较、当前供应商保存同步写入、首次 default 导入与官方入口。agents.max_threads 恢复上游全局属性。允许运行中切换，事后提示重启。横屏只调整宽度、抽屉和滚动；方向由用户/Android 控制。后续平台差异先与用户讨论。

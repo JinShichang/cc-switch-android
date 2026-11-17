@@ -59,3 +59,5 @@ npm run preview -- --port 4179
 应用包名 `app.ccswitch.android`。声明 INTERNET、前台服务 specialUse、通知和 WAKE_LOCK，用于用户启用的本机中转；无外部存储、全盘访问或 Root 权限。只加载内置 WebView 资源，通过有来源和主框架限制的 WebMessage 接口访问原生功能。没有 PRoot、Debian 或 Rust runtime。zstd-jni 官方 Android AAR 带 ARM64 解压 .so，APK 仅打包 arm64-v8a；其他界面/SAF 部分使用 ART 与 WebView。
 
 0.3.1 的额外检查包含 SessionLogReader 主机测试（完整尾行、部分尾行、异常行、压缩日志、字段投影），可用相同缓存增量构建。源码导出使用 git archive，不包含用户密钥、签名文件或 node_modules。
+
+0.3.2 新增 ProviderInitializationTest（6 项主机测试），覆盖首次导入、升级只补官方入口、删除后不重建及列表并发冲突。仍使用相同签名与缓存，无须 clean。

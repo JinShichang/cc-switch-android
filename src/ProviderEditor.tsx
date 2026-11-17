@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import type { Provider } from "./core/types";
-import { validateProvider } from "./core/codex";
+import type { Provider, ProviderEditorBase } from "./core/types";
+import { validateProvider, providerConfigFromEditor } from "./core/codex";
 import { parseConfig } from "./core/tomlPatch";
 import { invoke, isNative } from "./bridge";
 import { FullScreenPanel } from "./vendor/components/common/FullScreenPanel";
@@ -35,18 +35,27 @@ export { Modal } from "./Modal";
 export const FILTER_NAME = "历史推理与ID过滤（解决不同源错误）";
 export function ProviderEditor({
   provider,
+  shownProvider = provider,
+  editorBase,
+  loadNotice,
   onClose,
   onSave,
   busy = false,
   saveError,
 }: {
   provider: Provider;
+  shownProvider?: Provider;
+  editorBase?: ProviderEditorBase;
+  loadNotice?: string;
   onClose: () => void;
-  onSave: (p: Provider) => Promise<void>;
+  onSave: (
+    p: Provider,
+    editor?: { base: ProviderEditorBase; config: string },
+  ) => Promise<void>;
   busy?: boolean;
   saveError?: string;
 }) {
-  const c = useCodexConfigState({ initialData: provider });
+  const c = useCodexConfigState({ initialData: shownProvider });
   const form = useForm<ProviderFormData>({
     defaultValues: {
       name: provider.name,
@@ -152,7 +161,13 @@ export function ProviderEditor({
           ...form.getValues(),
           settingsConfig: {
             auth,
-            config: c.codexConfig,
+            config: editorBase
+              ? providerConfigFromEditor(
+                  provider,
+                  editorBase.config,
+                  c.codexConfig,
+                )
+              : c.codexConfig,
             modelCatalog: {
               models,
               autoReviewModel: c.codexAutoReviewModel,
@@ -165,6 +180,7 @@ export function ProviderEditor({
           },
           historyFilter: filter,
         }),
+        editorBase ? { base: editorBase, config: c.codexConfig } : undefined,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -174,7 +190,11 @@ export function ProviderEditor({
     <FullScreenPanel
       isOpen
       title={provider.name ? "编辑供应商" : "添加供应商"}
-      subtitle="Codex · 自定义配置"
+      subtitle={
+        provider.category === "official"
+          ? "Codex · 官方配置"
+          : "Codex · 自定义配置"
+      }
       onClose={onClose}
       contentClassName="mobile-provider space-y-6 p-4"
       footer={
@@ -188,6 +208,11 @@ export function ProviderEditor({
         </div>
       }
     >
+      {loadNotice && (
+        <p role="status" className="inline-warning">
+          {loadNotice}
+        </p>
+      )}
       <Form {...form}>
         <form
           onSubmit={(e) => {
@@ -200,7 +225,7 @@ export function ProviderEditor({
           <CodexFormFields
             appId="codex"
             variant="classic"
-            category="custom"
+            category={provider.category}
             codexApiKey={c.codexApiKey}
             onApiKeyChange={c.handleCodexApiKeyChange}
             shouldShowApiKeyLink={false}
@@ -282,7 +307,7 @@ export function ProviderEditor({
             {filter && (
               <>
                 <p className="text-caption text-fg-2">
-                  需要持续后台运行。保存方案后还需应用；关闭后重新应用恢复直连，并重启
+                  需要持续后台运行。当前供应商保存后同步应用，其他方案需点击启用；关闭后应用恢复直连，并重启
                   Codex。
                 </p>
                 <Button

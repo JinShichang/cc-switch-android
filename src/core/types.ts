@@ -61,6 +61,12 @@ export interface Snapshot {
   >;
 }
 
+/** Original file and projected content shown when opening a provider editor. */
+export interface ProviderEditorBase {
+  snapshot: Snapshot;
+  config: string;
+}
+
 export interface Backup {
   id: string;
   createdAt: number;
@@ -72,6 +78,8 @@ export interface Backup {
 
 export interface AppState {
   providers: Provider[];
+  providerInitialization?: number;
+  currentProviderId?: string;
   backups: Backup[];
   directory: DirectoryInfo | null;
   pendingRecovery: boolean;

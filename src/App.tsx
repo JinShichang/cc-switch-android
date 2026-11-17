@@ -66,6 +66,9 @@ import { ProviderEditor, Modal } from "./ProviderEditor";
 import { invoke, isNative } from "./bridge";
 import {
   captureCurrent,
+  initialProviderSetup,
+  providerEditorView,
+  planProviderEditorGlobals,
   exportProviders,
   formValues,
   importProviders,
@@ -76,7 +79,12 @@ import {
   redactConfig,
   validateProvider,
 } from "./core/codex";
-import type { AppState, Provider, Snapshot } from "./core/types";
+import type {
+  AppState,
+  Provider,
+  ProviderEditorBase,
+  Snapshot,
+} from "./core/types";
 import type { Prompt } from "./lib/api";
 import type { SettingsSection, View } from "./lib/navigation";
 import {
@@ -237,6 +245,11 @@ export function App() {
     [notice, setNotice] = useState("");
   const [query, setQuery] = useState(""),
     [providerEditor, setProviderEditor] = useState<Provider | null>(null);
+  const [providerShown, setProviderShown] = useState<Provider | null>(null);
+  const [providerBase, setProviderBase] = useState<
+    ProviderEditorBase | undefined
+  >();
+  const [providerLoadNotice, setProviderLoadNotice] = useState("");
   const [dialog, setDialog] = useState<Dialog | null>(null),
     [mcpEditor, setMcpEditor] = useState<McpEditor | null>(null);
   const [promptEditor, setPromptEditor] = useState<PromptEditor | null>(null),
@@ -279,17 +292,59 @@ export function App() {
       setBusy(false);
     }
   };
+  const initializeProviders = async (next: AppState, live: Snapshot) => {
+    if (!isNative || next.providerInitialization === 1) return next;
+    const setup = initialProviderSetup(next, live);
+    const result = await invoke<AppState>("initializeProviders", {
+      expectedRevision: live.revision,
+      expectedProviderIds: next.providers.map((p) => p.id),
+      additions: setup.additions,
+      importedId: setup.importedId,
+    });
+    if (setup.warnings.length) setError(setup.warnings.join(" "));
+    return result;
+  };
   const refresh = async () => {
     try {
       const live = await invoke<Snapshot>("readCurrent");
       setSnapshot(live);
-      setState(await invoke<AppState>("bootstrap"));
+      setState(
+        await initializeProviders(await invoke<AppState>("bootstrap"), live),
+      );
       return live;
     } catch (e) {
       setSnapshot(null);
       throw e;
     }
   };
+  const openProviderEditor = (provider: Provider) =>
+    action("读取当前配置…", async () => {
+      setProviderShown(provider);
+      setProviderBase(undefined);
+      setProviderLoadNotice("");
+      if (state.directory) {
+        try {
+          const live = await invoke<Snapshot>("readCurrent");
+          setSnapshot(live);
+          const shown = providerEditorView(live, provider);
+          setProviderShown(shown);
+          setProviderBase({
+            snapshot: live,
+            config: shown.settingsConfig.config,
+          });
+        } catch (e) {
+          setProviderLoadNotice(
+            "无法读取当前 Codex 配置，下面显示保存的方案或上游默认模板：" +
+              message(e),
+          );
+        }
+      } else {
+        setProviderLoadNotice(
+          "尚未授权 Codex 目录，当前显示上游默认模板或保存的方案。连接目录后重新打开，将带入完整 config.toml（含 MCP、插件和项目设置）。",
+        );
+      }
+      setProviderEditor(provider);
+    });
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -301,7 +356,11 @@ export function App() {
         setPicker(await invoke<PickerStatus>("providerStatus"));
         if (next.directory) {
           const current = await invoke<Snapshot>("readCurrent");
-          if (alive) setSnapshot(current);
+          if (alive) {
+            setSnapshot(current);
+            const initialized = await initializeProviders(next, current);
+            if (alive) setState(initialized);
+          }
         }
       } catch (e) {
         if (alive) setError(message(e));
@@ -432,10 +491,12 @@ export function App() {
       setCatalog(null);
       setUsageRows([]);
       setUsageScanned(false);
-      setSnapshot(await invoke<Snapshot>("readCurrent"));
+      const live = await invoke<Snapshot>("readCurrent");
+      setSnapshot(live);
+      setState(await initializeProviders(next, live));
       setNotice(
         next.directory?.isCodexProvider
-          ? "已授权 Codex 文档目录。请安全退出桌面客户端后切换配置。"
+          ? "已授权 Codex 文档目录。可直接切换配置，完成后重启 Codex 生效。"
           : "已授权普通 SAF 目录；对此目录的验证不代表已接通 Codex。",
       );
     });
@@ -759,7 +820,7 @@ export function App() {
               disabled: !snapshot,
               onClick: () => {
                 try {
-                  setProviderEditor(captureCurrent(snapshot!, "当前配置"));
+                  openProviderEditor(captureCurrent(snapshot!, "当前配置"));
                 } catch (e) {
                   setError(message(e));
                 }
@@ -772,7 +833,7 @@ export function App() {
         <Button
           size="icon"
           aria-label="添加供应商"
-          onClick={() => setProviderEditor(newProvider())}
+          onClick={() => openProviderEditor(newProvider())}
         >
           <Plus size={18} />
         </Button>
@@ -991,7 +1052,7 @@ export function App() {
                         !query ? (
                           <Button
                             variant="neutral"
-                            onClick={() => setProviderEditor(newProvider())}
+                            onClick={() => openProviderEditor(newProvider())}
                           >
                             <Plus size={16} />
                             添加供应商
@@ -1005,6 +1066,8 @@ export function App() {
                     <div className="provider-list">
                       {filtered.map((provider) => {
                         const values = formValues(provider);
+                        const isCurrent =
+                          state.currentProviderId === provider.id;
                         const match = snapshot
                           ? matchProvider(snapshot, provider)
                           : "none";
@@ -1012,7 +1075,7 @@ export function App() {
                           <article
                             className={
                               "provider-row " +
-                              (match === "exact" ? "current" : "")
+                              (match === "exact" || isCurrent ? "current" : "")
                             }
                             key={provider.id}
                           >
@@ -1027,9 +1090,9 @@ export function App() {
                               <div className="min-w-0">
                                 <div className="row-title">
                                   <strong>{provider.name}</strong>
-                                  {match === "exact" && (
+                                  {(match === "exact" || isCurrent) && (
                                     <span className="badge success">
-                                      当前文件
+                                      {isCurrent ? "当前方案" : "当前文件"}
                                     </span>
                                   )}
                                 </div>
@@ -1068,7 +1131,7 @@ export function App() {
                                 size="icon"
                                 aria-label={"编辑 " + provider.name}
                                 disabled={busy}
-                                onClick={() => setProviderEditor(provider)}
+                                onClick={() => openProviderEditor(provider)}
                               >
                                 <Pencil size={15} />
                               </Button>
@@ -1083,7 +1146,7 @@ export function App() {
                                   {
                                     label: "复制配置",
                                     onClick: () => {
-                                      setProviderEditor({
+                                      openProviderEditor({
                                         ...structuredClone(provider),
                                         id: crypto.randomUUID(),
                                         name: provider.name + " 副本",
@@ -1153,7 +1216,7 @@ export function App() {
                           variant="neutral"
                           onClick={() => {
                             try {
-                              setProviderEditor(
+                              openProviderEditor(
                                 captureCurrent(snapshot, "当前配置"),
                               );
                             } catch (e) {
@@ -1952,20 +2015,88 @@ export function App() {
       </div>
       {providerEditor && (
         <ProviderEditor
+          key={providerEditor.id}
           provider={providerEditor}
+          shownProvider={providerShown ?? providerEditor}
+          editorBase={providerBase}
+          loadNotice={providerLoadNotice}
           onClose={closeProvider}
           busy={busy}
           saveError={error}
-          onSave={(provider) =>
+          onSave={(provider, editor) =>
             action("保存供应商…", async () => {
               const valid = validateProvider(provider);
-              await saveProviders(
-                state.providers.some((p) => p.id === valid.id)
-                  ? state.providers.map((p) => (p.id === valid.id ? valid : p))
-                  : [...state.providers, valid],
-              );
+              const providers = state.providers.some((p) => p.id === valid.id)
+                ? state.providers.map((p) => (p.id === valid.id ? valid : p))
+                : [...state.providers, valid];
+              let globalsChanged = false;
+              let savedCurrent = false;
+              if (editor) {
+                const live = await invoke<Snapshot>("readCurrent");
+                if (live.directory.uri !== editor.base.snapshot.directory.uri)
+                  throw new Error("授权目录已改变，请重新打开供应商编辑页。");
+                const plan = planProviderEditorGlobals(
+                  providerEditor,
+                  editor.base.config,
+                  editor.config,
+                  live.config ?? "",
+                );
+                const isExisting = state.providers.some(
+                  (p) => p.id === valid.id,
+                );
+                const currentId =
+                  state.currentProviderId ?? state.lastApplied?.id;
+                const writesKeyFields = isExisting
+                  ? currentId === valid.id
+                  : !currentId;
+                if (plan.changedFields.length || writesKeyFields) {
+                  let config = plan.config;
+                  let applyArgs: Record<string, unknown> = {};
+                  if (writesKeyFields) {
+                    // Like desktop: saving the current direct provider also
+                    // refreshes its live route in the same file transaction.
+                    const routed = await prepareFilteredProvider(valid);
+                    const applied = planApply({ ...live, config }, routed);
+                    config = applied.config;
+                    applyArgs = {
+                      applyProvider: true,
+                      providerId: valid.id,
+                      ownership: applied.ownership,
+                      catalog: applied.catalog,
+                    };
+                  }
+                  const result = await invoke<{
+                    state: AppState;
+                    snapshot: Snapshot;
+                  }>("saveProviderEditor", {
+                    providers,
+                    config,
+                    expectedRevision: live.revision,
+                    ...applyArgs,
+                  });
+                  setState(result.state);
+                  setSnapshot(result.snapshot);
+                  if (writesKeyFields && !valid.historyFilter) {
+                    try {
+                      await invoke("stopFilter");
+                    } catch {
+                      setError(
+                        "配置已保存，但停止旧中转服务失败，请检查运行状态。",
+                      );
+                    }
+                  }
+                  globalsChanged = true;
+                  savedCurrent = writesKeyFields;
+                } else await saveProviders(providers);
+              } else await saveProviders(providers);
               setProviderEditor(null);
-              setNotice("供应商方案已保存。启用后才会写入授权目录。");
+              setNotice(
+                globalsChanged
+                  ? savedCurrent
+                    ? "供应商方案已保存，当前供应商配置已写入并读回核验。重启 Codex 后确认生效。"
+                    : "供应商方案与修改的全局设置已保存，文件已读回核验。新供应商需点击启用后切换；重启 Codex 后确认生效。"
+                  : "供应商方案已保存。启用后切换配置，再重启 Codex 生效。",
+              );
             })
           }
         />

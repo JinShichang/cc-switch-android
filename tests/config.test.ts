@@ -9,6 +9,10 @@ import {
   importProviders,
   matchProvider,
   newProvider,
+  initialProviderSetup,
+  providerEditorView,
+  providerConfigFromEditor,
+  planProviderEditorGlobals,
   planApply,
   projection,
   redactConfig,
@@ -717,5 +721,267 @@ test("legacy Android login selectors are discarded and never override auth compa
   assert.equal(
     loggedIn.model_providers.custom.experimental_bearer_token,
     "TEST_ONLY_KEY_123",
+  );
+});
+
+const fullLiveConfig = `# Complete live file, not a mobile template
+model = "current-model"
+model_provider = "custom"
+service_tier = "default"
+cwd = "/home/codex/workspace"
+[desktop]
+localeOverride = "zh-CN"
+sansFontSize = 14
+[plugins."fixture@example"]
+enabled = true
+[[skills.config]]
+path = "/home/codex/.codex/skills/test/SKILL.md"
+enabled = true
+[mcp_servers.android]
+command = "/usr/local/bin/mcp-android"
+args = ["--stdio"]
+[mcp_servers.android.tools.click]
+approval_mode = "approve"
+[projects."/home/codex/workspace"]
+trust_level = "trusted"
+[agents]
+max_threads = 8
+[model_providers.custom]
+name = "old"
+base_url = "https://old.invalid/v1"
+wire_api = "responses"
+experimental_bearer_token = "TEST_OLD_ROUTE_KEY"
+`;
+
+test("new editor overlays the upstream template on the full live config without copying old route credentials", () => {
+  const draft = newProvider();
+  const live = snapshot(fullLiveConfig);
+  const original = structuredClone(live);
+  const shown = providerEditorView(live, draft);
+  const doc = parseConfig(shown.settingsConfig.config);
+  assert.equal(doc.model, "gpt-5.6-sol");
+  assert.equal(doc.desktop.localeOverride, "zh-CN");
+  assert.equal(doc.plugins["fixture@example"].enabled, true);
+  assert.equal(
+    doc.skills.config[0].path,
+    "/home/codex/.codex/skills/test/SKILL.md",
+  );
+  assert.equal(doc.mcp_servers.android.tools.click.approval_mode, "approve");
+  assert.equal(doc.projects["/home/codex/workspace"].trust_level, "trusted");
+  assert.equal(doc.agents.max_threads, 8);
+  assert.ok(shown.settingsConfig.config.split("\n").length > 25);
+  assert.ok(!shown.settingsConfig.config.includes("TEST_OLD_ROUTE_KEY"));
+  assert.equal(shown.settingsConfig.auth.OPENAI_API_KEY, "");
+  assert.deepEqual(live, original);
+  assert.throws(() => planApply(live, draft), /模型|地址|Key/);
+});
+
+test("editor no-op keeps inherited globals out of a new row and performs no live write", () => {
+  const draft = newProvider();
+  const base = providerEditorView(snapshot(fullLiveConfig), draft)
+    .settingsConfig.config;
+  const stored = providerConfigFromEditor(draft, base, base);
+  const doc = parseConfig(stored);
+  assert.equal(doc.mcp_servers, undefined);
+  assert.equal(doc.desktop, undefined);
+  assert.equal(doc.skills, undefined);
+  assert.equal(doc.projects, undefined);
+  assert.equal(doc.agents, undefined);
+  const plan = planProviderEditorGlobals(draft, base, base, fullLiveConfig);
+  assert.equal(plan.config, fullLiveConfig);
+  assert.deepEqual(plan.changedFields, []);
+});
+
+test("editor global edits merge only changed values and preserve independent external edits", () => {
+  const draft = newProvider();
+  const base = providerEditorView(snapshot(fullLiveConfig), draft)
+    .settingsConfig.config;
+  let edited = patchPath(base, ["desktop", "sansFontSize"], 16);
+  edited = patchPath(edited, ["agents", "max_threads"], 12);
+  edited = patchPath(
+    edited,
+    ["mcp_servers", "android", "tools", "click", "approval_mode"],
+    "deny",
+  );
+  const current = patchPath(
+    fullLiveConfig,
+    ["desktop", "localeOverride"],
+    "en-US",
+  );
+  const plan = planProviderEditorGlobals(draft, base, edited, current);
+  const doc = parseConfig(plan.config);
+  assert.equal(doc.desktop.sansFontSize, 16);
+  assert.equal(doc.desktop.localeOverride, "en-US");
+  assert.equal(doc.agents.max_threads, 12);
+  assert.equal(doc.mcp_servers.android.tools.click.approval_mode, "deny");
+  assert.equal(
+    doc.model_providers.custom.experimental_bearer_token,
+    "TEST_OLD_ROUTE_KEY",
+  );
+  assert.equal(
+    parseConfig(providerConfigFromEditor(draft, base, edited)).desktop,
+    undefined,
+  );
+});
+
+test("editor refuses conflicting global changes without echoing credentials", () => {
+  const draft = newProvider();
+  const base = providerEditorView(snapshot(fullLiveConfig), draft)
+    .settingsConfig.config;
+  const edited = patchPath(base, ["mcp_servers", "android", "args"], ["mine"]);
+  const current = patchPath(
+    fullLiveConfig,
+    ["mcp_servers", "android", "args"],
+    ["theirs"],
+  );
+  assert.throws(
+    () => planProviderEditorGlobals(draft, base, edited, current),
+    (error: any) => {
+      assert.equal(error.code, "editor_conflict");
+      assert.ok(!error.message.includes("TEST_OLD_ROUTE_KEY"));
+      return true;
+    },
+  );
+});
+
+test("editor allows deliberate global additions and removals without changing the selected route", () => {
+  const draft = newProvider();
+  const base = providerEditorView(snapshot(fullLiveConfig), draft)
+    .settingsConfig.config;
+  let edited = patchPath(base, ["plugins", "fixture@example"], undefined);
+  edited = patchPath(edited, ["mcp_servers", "new"], {
+    command: "fixture-tool",
+    args: [],
+  });
+  const plan = planProviderEditorGlobals(draft, base, edited, fullLiveConfig);
+  const doc = parseConfig(plan.config);
+  assert.equal(doc.plugins?.["fixture@example"], undefined);
+  assert.equal(doc.mcp_servers.new.command, "fixture-tool");
+  assert.equal(doc.mcp_servers.android.command, "/usr/local/bin/mcp-android");
+  assert.equal(doc.model, "current-model");
+});
+
+test("editor preserves stored inactive settings while showing current live settings", () => {
+  const p = provider();
+  p.settingsConfig.config += "\n[desktop]\nsansFontSize=10\n";
+  const base = providerEditorView(snapshot(fullLiveConfig), p).settingsConfig
+    .config;
+  assert.equal(parseConfig(base).desktop.sansFontSize, 14);
+  const row = providerConfigFromEditor(
+    p,
+    base,
+    patchPath(base, ["desktop", "sansFontSize"], 18),
+  );
+  assert.equal(parseConfig(row).desktop.sansFontSize, 10);
+  assert.equal(parseConfig(row).mcp_servers, undefined);
+});
+
+test("first connection imports the complete default and seeds the official card without login tokens", () => {
+  const live = snapshot(
+    fullLiveConfig,
+    '{"tokens":{"access_token":"TEST_OAUTH_ONLY"}}',
+  );
+  const setup = initialProviderSetup({ providers: [] }, live);
+  assert.deepEqual(
+    setup.additions.map((p) => p.id),
+    ["default", "codex-official"],
+  );
+  assert.equal(setup.additions[0].settingsConfig.config, fullLiveConfig);
+  assert.equal(
+    setup.additions[0].settingsConfig.auth.OPENAI_API_KEY,
+    "TEST_OLD_ROUTE_KEY",
+  );
+  assert.equal(setup.importedId, "default");
+  assert.deepEqual(setup.additions[1].settingsConfig, { auth: {}, config: "" });
+  assert.ok(!JSON.stringify(setup.additions).includes("TEST_OAUTH_ONLY"));
+});
+
+test("initialization adds only the official card for existing installs and honors the once flag", () => {
+  const setup = initialProviderSetup(
+    { providers: [provider()] },
+    snapshot(fullLiveConfig),
+  );
+  assert.deepEqual(
+    setup.additions.map((p) => p.id),
+    ["codex-official"],
+  );
+  assert.equal(setup.importedId, undefined);
+  const done = initialProviderSetup(
+    { providers: [], providerInitialization: 1 },
+    snapshot(fullLiveConfig),
+  );
+  assert.deepEqual(done.additions, []);
+});
+
+test("official current config is imported fully while keyring login is not invented", () => {
+  const source =
+    'model="gpt-5.6-sol"\ncli_auth_credentials_store="keyring"\n[mcp_servers.android]\ncommand="fixture"\n';
+  const setup = initialProviderSetup({ providers: [] }, snapshot(source));
+  assert.equal(setup.additions[0].authKind, "official");
+  assert.equal(setup.additions[0].settingsConfig.config, source);
+  assert.deepEqual(setup.additions[0].settingsConfig.auth, {});
+});
+
+test("malformed or taken-over current files are not imported as a misleading default", () => {
+  const malformed = initialProviderSetup(
+    { providers: [] },
+    snapshot("model = @"),
+  );
+  assert.deepEqual(
+    malformed.additions.map((p) => p.id),
+    ["codex-official"],
+  );
+  assert.equal(malformed.warnings.length, 1);
+  const relay = fullLiveConfig.replace(
+    "https://old.invalid/v1",
+    "http://127.0.0.1:18181/r/TEST_ROUTE",
+  );
+  const managed = initialProviderSetup({ providers: [] }, snapshot(relay));
+  assert.equal(
+    managed.additions.some((p) => p.id === "default"),
+    false,
+  );
+  const missing = initialProviderSetup({ providers: [] }, snapshot(null));
+  assert.deepEqual(
+    missing.additions.map((p) => p.id),
+    ["codex-official"],
+  );
+});
+
+test("editor empty endpoint does not preinsert an empty URL that upstream form would duplicate", () => {
+  const shown = providerEditorView(snapshot(fullLiveConfig), newProvider());
+  const doc = parseConfig(shown.settingsConfig.config);
+  assert.equal(doc.model_providers.custom.base_url, undefined);
+  assert.match(shown.settingsConfig.config, /^model_reasoning_effort = /m);
+  const withAddress = patchPath(
+    shown.settingsConfig.config,
+    ["model_providers", "custom", "base_url"],
+    "https://new.invalid/v1",
+  );
+  assert.equal(
+    parseConfig(withAddress).model_providers.custom.base_url,
+    "https://new.invalid/v1",
+  );
+});
+
+test("editor supports arrays of tables, multiline strings and CRLF without copying live globals into a row", () => {
+  const p = newProvider();
+  const source = fullLiveConfig.replace(/\n/g, "\r\n");
+  const base = providerEditorView(snapshot(source), p).settingsConfig.config;
+  assert.ok(base.includes("[[skills.config]]\r\n"));
+  const edited = patchPath(
+    base,
+    ["user_note"],
+    "line one\n[model_providers.fake]\nline two",
+  );
+  const plan = planProviderEditorGlobals(p, base, edited, source);
+  assert.equal(
+    parseConfig(plan.config).user_note,
+    "line one\n[model_providers.fake]\nline two",
+  );
+  assert.ok(plan.config.includes("[[skills.config]]\r\n"));
+  assert.equal(
+    parseConfig(providerConfigFromEditor(p, base, edited)).user_note,
+    undefined,
   );
 });

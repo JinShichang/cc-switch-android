@@ -201,6 +201,8 @@ public final class MainActivity extends Activity {
                     }
                     if (!preferences.edit().clear().commit()) throw new AppFailure("preferences_write", "无法保存目录授权设置。");
                     result = state(); break;
+                case "initializeProviders": result = initializeProviders(args); break;
+                case "saveProviderEditor": result = saveProviderEditor(args); break;
                 case "saveProviders":
                     JSONArray providers = args.getJSONArray("providers");
                     if (providers.length() > 200) throw new AppFailure("profile_limit", "最多保留 200 个服务商方案。");
@@ -310,8 +312,80 @@ public final class MainActivity extends Activity {
         return new JSONObject().put("providers", data.getJSONArray("providers")).put("backups", backups)
             .put("directory", directory == null ? JSONObject.NULL : directory).put("settings", settings).put("native", true)
             .put("pendingRecovery", data.getJSONObject("journals").has(uri))
-            .put("lastApplied", data.opt("lastApplied")).put("prompts", data.getJSONArray("prompts"))
+            .put("lastApplied", data.opt("lastApplied")).put("providerInitialization", data.optInt("providerInitialization", 0))
+            .put("currentProviderId", data.opt("currentProviderId")).put("prompts", data.getJSONArray("prompts"))
             .put("documentBackups", documentBackups).put("pendingDocuments", pendingDocuments);
+    }
+
+    /** Same order as desktop: import live only when empty, then seed the official
+     * card once. This writes only the local vault, never the Codex directory. */
+    private Object initializeProviders(JSONObject args) throws Exception {
+        JSONObject data = repository.copy();
+        if (data.optInt("providerInitialization", 0) == 1) return state();
+        TreeAccess access = tree();
+        JSONObject live = snapshot(access);
+        if (!live.getString("revision").equals(args.getString("expectedRevision")))
+            throw new AppFailure("conflict", "初始化期间 Codex 配置已改变，请刷新后重试；没有写入 Codex 文件。");
+        JSONObject updated = ProviderInitialization.initialize(data, args);
+        String imported = args.optString("importedId");
+        if (!imported.isEmpty()) updated.put("currentProviderId", imported);
+        else if (!updated.has("currentProviderId")) {
+            JSONObject last = data.optJSONObject("lastApplied");
+            String previousId = last == null ? "" : last.optString("id");
+            JSONArray rows = data.getJSONArray("providers");
+            for (int i = 0; i < rows.length(); i++) {
+                if (rows.getJSONObject(i).optString("id").equals(previousId))
+                    updated.put("currentProviderId", previousId);
+            }
+        }
+        repository.replace(updated);
+        return state();
+    }
+
+    /** Desktop editor save: row fields and intentional live edits. Keep the row
+     * if a publication is uncertain; revert local rows if nothing was written. */
+    private Object saveProviderEditor(JSONObject args) throws Exception {
+        TreeAccess access = tree();
+        JSONObject before = repository.copy();
+        String uri = access.tree.toString();
+        if (before.getJSONObject("journals").has(uri))
+            throw new AppFailure("pending_recovery", "请先恢复未确认的配置写入。");
+        JSONArray providers = args.getJSONArray("providers");
+        Set<String> ids = new HashSet<>();
+        if (providers.length() > 200) throw new AppFailure("profile_limit", "最多保留 200 个服务商方案。");
+        for (int i = 0; i < providers.length(); i++) {
+            JSONObject item = providers.getJSONObject(i);
+            if (!ids.add(item.getString("id")) || item.getString("name").trim().isEmpty()
+                    || item.getJSONObject("settingsConfig").getString("config").length() > TreeAccess.MAX_CONFIG)
+                throw new AppFailure("invalid_profile", "方案结构、大小或标识不正确，没有保存。");
+        }
+        byte[] config = args.getString("config").getBytes(StandardCharsets.UTF_8);
+        if (config.length > TreeAccess.MAX_CONFIG) throw new AppFailure("too_large", "配置超过 2 MB 限制。");
+        if (!snapshot(access).getString("revision").equals(args.getString("expectedRevision")))
+            throw new AppFailure("conflict", "配置或认证文件已改变，请重新保存；没有覆盖外部修改。");
+        byte[] originalConfig = access.read();
+        JSONObject next = repository.copy();
+        next.put("providers", providers);
+        repository.replace(next);
+        try {
+            if (args.optBoolean("applyProvider")) {
+                return apply(args);
+            }
+            JSONObject owned = before.getJSONObject("ownership").optJSONObject(uri);
+            writeConfig(access, config, args.getString("expectedRevision"), owned == null ? new JSONObject() : owned,
+                "mcp", "供应商编辑器 · 修改全局设置");
+            return new JSONObject().put("state", state()).put("snapshot", snapshot(access))
+                .put("fileVerified", true).put("runtimeConfirmed", false);
+        } catch (Exception failure) {
+            JSONObject result = repository.copy();
+            boolean untouched = false;
+            try { untouched = Arrays.equals(originalConfig, access.read()); } catch (Exception ignored) { }
+            if (!result.getJSONObject("journals").has(uri) && untouched) {
+                result.put("providers", before.getJSONArray("providers"));
+                repository.replace(result);
+            }
+            throw failure;
+        }
     }
 
     private Object apply(JSONObject args) throws Exception {
@@ -409,6 +483,10 @@ public final class MainActivity extends Activity {
     }
     private void recordApplied(JSONObject data, String uri, JSONObject ownership, String providerId, TreeAccess access) throws Exception {
         data.getJSONObject("ownership").put(uri, ownership);
+        if (!providerId.isEmpty() && !providerId.equals("mcp")) {
+            if (providerId.equals("restored")) data.remove("currentProviderId");
+            else data.put("currentProviderId", providerId);
+        }
         data.put("lastApplied", new JSONObject().put("id", providerId).put("time", System.currentTimeMillis())
             .put("treeUri", uri).put("revision", TransactionEngine.revision(access.read(), access.auth())));
     }

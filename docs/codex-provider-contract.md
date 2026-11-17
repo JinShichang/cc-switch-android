@@ -1,6 +1,6 @@
 # 给 Codex Android 宿主的对接契约
 
-状态：2026-11-16，CC Switch Android 0.3.1 已实现 SAF 消费端。当前本地 Codex 源码已包含 CodexDocumentsProvider（com.ai.codex.documents），由原会话负责。本工程未修改 Codex 源码；尚未确认用户手机是否安装对应版本，也尚未完成实机联调。
+状态：2026-11-17，CC Switch Android 0.3.2 已实现 SAF 消费端。当前本地 Codex 源码已包含 CodexDocumentsProvider（com.ai.codex.documents），由原会话负责。本工程未修改 Codex 源码；尚未确认用户手机是否安装对应版本，也尚未完成实机联调。
 
 ## 暴露目录
 
@@ -103,3 +103,9 @@ CC Switch 上游当前 `live/project/codex.rs` 明确使用 provider 表中的 `
 ## 0.3.1 会话用量兼容
 
 提供方须返回原始 UTF-8 JSONL / Zstandard 字节，不能重写事件、尾部或时间戳。支持 .jsonl.zst 只读，不解压写回宿主；压缩与普通同名文件同时存在时优先普通文件。记录投影保留 ordinal、history_mode、history_base、forked_from_ordinal_exclusive、rate_limits.limit_id 和响应 usage，用于续写和去重。目录文档应有真实 SIZE/LAST_MODIFIED；活跃尾行在后续同步重读。统计不修改日志或 Codex 数据库。
+
+## 0.3.2 编辑器与初始化
+
+新增/编辑界面直接读取整个 config.toml，以供应商字段叠加后完整显示；未改动的 MCP、插件、Skills 配置、项目和工作目录保持原样。编辑器保存的全局改动按上游粒度做三方比较，再以当前 revision 和原有 SAF 事务落盘。供应商正在运行不是禁止写入的理由；配置落盘后再重启 Codex 生效。宿主仍须在关闭 rwt 流后发布文件，避免运行中的读取者看到半截文本。
+
+首次成功读取后自动导入完整 default，再添加独立 OpenAI Official 入口。已有方案不覆盖；初始化删除标记留在 CC Switch 加密库。不会自动备份或复制 OAuth/钥匙串 token；原始配置保留在 default 的 config 字符串，真实写入前仍按既有机制备份。

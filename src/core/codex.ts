@@ -48,7 +48,6 @@ const NESTED = [
   "agents.default_subagent_reasoning_effort",
   "memories.extract_model",
   "memories.consolidation_model",
-  "agents.max_threads",
 ];
 const EFFORTS = [
   "none",
@@ -393,6 +392,66 @@ export function newProvider(kind: AuthKind = "apiKey"): Provider {
   };
 }
 
+/** Startup import then official seed, following provider/live.rs and
+ * database/dao/providers_seed.rs. Authentication tokens stay with Codex. */
+export function initialProviderSetup(
+  state: Pick<
+    import("./types.ts").AppState,
+    "providers" | "providerInitialization"
+  >,
+  snapshot: Snapshot,
+) {
+  if (state.providerInitialization === 1)
+    return {
+      additions: [] as Provider[],
+      warnings: [] as string[],
+      importedId: undefined as string | undefined,
+    };
+  const additions: Provider[] = [],
+    warnings: string[] = [];
+  let importedId: string | undefined;
+  if (
+    !state.providers.length &&
+    (snapshot.config !== null || snapshot.auth !== null)
+  ) {
+    try {
+      const source = snapshot.config ?? "";
+      const doc = parseConfig(source);
+      const route = selectedTable(doc);
+      if (
+        source.includes("PROXY_MANAGED") ||
+        /^http:\/\/127\.0\.0\.1:18181\/r\//.test(string(route?.base_url))
+      )
+        bad(
+          "proxy_import",
+          "当前配置由本机中转接管，不能把中转地址导入为 default。请先恢复原供应商配置。",
+        );
+      const imported = captureCurrent(snapshot, "default");
+      imported.id = "default";
+      // Preserve the entire original TOML in the imported row, just like desktop.
+      // The editor projection and switch retain ownership of unrelated live keys.
+      imported.settingsConfig.config = source;
+      additions.push(validateProvider(imported));
+      importedId = imported.id;
+    } catch (error) {
+      warnings.push(
+        "未自动导入 default：" +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
+  }
+  if (!state.providers.some((p) => p.id === "codex-official")) {
+    const official = newProvider("official");
+    official.id = "codex-official";
+    official.name = "OpenAI Official";
+    official.icon = "openai";
+    official.iconColor = "#00A67E";
+    official.websiteUrl = "https://chatgpt.com/codex";
+    additions.push(official);
+  }
+  return { additions, warnings, importedId };
+}
+
 export function readSummary(snapshot: Snapshot) {
   const doc = parseConfig(snapshot.config ?? "");
   validateRelatedFields(doc);
@@ -486,6 +545,19 @@ export function planApply(snapshot: Snapshot, provider: Provider): ApplyPlan {
       "当前文件含 Codex 保留名称的 model_providers 表（openai/ollama/lmstudio）。请先在 Codex 中迁移该旧配置；本次未覆盖这些表。",
     );
   }
+  const applied = patchProviderProjection(snapshot, target);
+  return {
+    ...applied,
+    warnings,
+    ...(catalog ? { catalog } : {}),
+  };
+}
+
+/** Shared by real switches and the read-only editor view, as in upstream's
+ * codex_editor::view / CodexProjection. Opening an editor never writes files. */
+function patchProviderProjection(snapshot: Snapshot, target: Projection) {
+  const source = snapshot.config ?? "";
+  const summary = { doc: parseConfig(source) };
   const changedFields: string[] = [];
   const paths: string[][] = [];
   let output = source;
@@ -531,9 +603,173 @@ export function planApply(snapshot: Snapshot, provider: Provider): ApplyPlan {
     config: output,
     ownership,
     changedFields: [...new Set(changedFields)],
-    warnings,
-    ...(catalog ? { catalog } : {}),
   };
+}
+
+/** Adapted from services/provider/codex_editor.rs::view (MIT, Jason Young).
+ * Project the row over the current file, not over a fabricated mobile template.
+ * Incomplete drafts can be displayed; strict validation stays in planApply. */
+export function providerEditorView(
+  snapshot: Snapshot,
+  provider: Provider,
+): Provider {
+  const current = parseConfig(snapshot.config ?? "");
+  const target = projection(
+    provider,
+    authStatus(snapshot.auth, current),
+    false,
+  );
+  if (target.route) {
+    if (!target.route.base_url) delete target.route.base_url;
+    // The provider's Key already has its own input. Never copy a live route Key
+    // into a new provider, and keep empty/pending credentials out of the TOML.
+    const rowKey = string(provider.settingsConfig.auth.OPENAI_API_KEY);
+    const token = string(target.route.experimental_bearer_token);
+    if (!token || (rowKey && token === rowKey))
+      delete target.route.experimental_bearer_token;
+  }
+  return {
+    ...provider,
+    settingsConfig: {
+      ...provider.settingsConfig,
+      config: patchProviderProjection(snapshot, target).config,
+    },
+  };
+}
+
+/** Same comparison granularity as upstream codex_editor::entries: root
+ * values, each child of a global table, and nonselected provider tables. */
+function editorGlobalPaths(
+  docs: TomlObject[],
+  routes: Set<string>,
+): string[][] {
+  const paths = new Map<string, string[]>();
+  for (const doc of docs) {
+    for (const [key, value] of Object.entries(doc)) {
+      if (
+        [
+          ...FLOOR,
+          ...EXCLUSIVE,
+          ...ROUTE_KEYS,
+          "disable_response_storage",
+        ].includes(key)
+      )
+        continue;
+      if (object(value)) {
+        for (const child of Object.keys(value)) {
+          if (key === "model_providers" && routes.has(child)) continue;
+          if (NESTED.includes(key + "." + child)) continue;
+          const path = [key, child];
+          paths.set(JSON.stringify(path), path);
+        }
+      } else paths.set(JSON.stringify([key]), [key]);
+    }
+  }
+  const all = [...paths.values()];
+  return all.filter(
+    (path) =>
+      !all.some(
+        (parent) =>
+          parent.length < path.length &&
+          parent.every((part, i) => part === path[i]),
+      ),
+  );
+}
+
+function editorRoutes(...docs: TomlObject[]) {
+  return new Set(["custom", ...docs.map((doc) => string(doc.model_provider))]);
+}
+
+/** Keep global settings out of new provider rows. Global edits are saved through
+ * the version-checked SAF transaction, matching upstream's editor save split. */
+export function providerConfigFromEditor(
+  provider: Provider,
+  base: string,
+  edited: string,
+): string {
+  const stored = parseConfig(provider.settingsConfig.config);
+  const before = parseConfig(base);
+  const after = parseConfig(edited);
+  let output = edited;
+  for (const path of editorGlobalPaths(
+    [stored, before, after],
+    editorRoutes(stored, before, after),
+  ))
+    output = patchPath(output, path, getPath(stored, path));
+  // Optional values inherited unchanged from live are global, not row-owned.
+  for (const key of [...EXCLUSIVE, ...NESTED]) {
+    const path = key.split(".");
+    if (
+      getPath(stored, path) === undefined &&
+      canonical(getPath(before, path)) === canonical(getPath(after, path))
+    )
+      output = patchPath(output, path, undefined);
+  }
+  const prune = (doc: TomlObject, path: string[] = []) => {
+    for (const [key, value] of Object.entries(doc)) {
+      const next = [...path, key];
+      if (!object(value)) continue;
+      prune(value, next);
+      if (
+        !Object.keys(getPath(parseConfig(output), next) ?? {}).length &&
+        getPath(stored, next) === undefined
+      )
+        output = patchPath(output, next, undefined);
+    }
+  };
+  prune(parseConfig(output));
+  return output;
+}
+
+/** Adapted from upstream editor_toml::TomlEdits: only user-edited global keys
+ * are merged; an independently changed value is refused without exposing it. */
+export function planProviderEditorGlobals(
+  provider: Provider,
+  base: string,
+  edited: string,
+  current: string,
+): { config: string; changedFields: string[] } {
+  const stored = parseConfig(provider.settingsConfig.config);
+  const before = parseConfig(base);
+  const after = parseConfig(edited);
+  const live = parseConfig(current);
+  const paths = editorGlobalPaths(
+    [before, after],
+    editorRoutes(stored, before, after),
+  );
+  // Deleting a live-only compatibility value is a deliberate global edit.
+  for (const key of EXCLUSIVE) {
+    if (
+      !Object.hasOwn(stored, key) &&
+      Object.hasOwn(before, key) &&
+      !Object.hasOwn(after, key)
+    )
+      paths.push([key]);
+  }
+  let output = current;
+  const changedFields: string[] = [];
+  for (const path of paths) {
+    const oldValue = getPath(before, path);
+    const newValue = getPath(after, path);
+    if (canonical(oldValue) === canonical(newValue)) continue;
+    const liveValue = getPath(live, path);
+    if (
+      canonical(liveValue) !== canonical(oldValue) &&
+      canonical(liveValue) !== canonical(newValue)
+    )
+      bad(
+        "editor_conflict",
+        "编辑期间 Codex 已修改 " +
+          path.join(".") +
+          "。请取消并重新打开，核对后再保存；没有覆盖外部修改。",
+      );
+    if (canonical(liveValue) !== canonical(newValue)) {
+      output = patchPath(output, path, newValue);
+      changedFields.push(path.join("."));
+    }
+  }
+  assertOnlyOwnedChanges(current, output, paths);
+  return { config: output, changedFields };
 }
 
 export function matchProvider(

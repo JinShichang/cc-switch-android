@@ -198,6 +198,10 @@ function statements(text: string): Statement[] {
   return result;
 }
 
+function keyText(key: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(key) ? key : JSON.stringify(key);
+}
+
 function valueText(value: any): string {
   if (typeof value === "string") return JSON.stringify(value);
   if (
@@ -304,7 +308,7 @@ export function patchPath(text: string, path: string[], value: any): string {
       output =
         before +
         separator +
-        `${JSON.stringify(path[0])} = ${valueText(value)}` +
+        `${keyText(path[0])} = ${valueText(value)}` +
         eol +
         output.slice(insertAt);
     } else {
@@ -330,7 +334,7 @@ export function patchPath(text: string, path: string[], value: any): string {
           output =
             before +
             (before.endsWith("\n") ? "" : eol) +
-            `${JSON.stringify(path.at(-1))} = ${valueText(value)}` +
+            `${keyText(path.at(-1)!)} = ${valueText(value)}` +
             eol +
             output.slice(insertAt);
         } else {
@@ -339,7 +343,7 @@ export function patchPath(text: string, path: string[], value: any): string {
           const insertAt = output.charCodeAt(0) === 0xfeff ? 1 : 0;
           output =
             output.slice(0, insertAt) +
-            `${path.map((k) => JSON.stringify(k)).join(".")} = ${valueText(value)}` +
+            `${path.map(keyText).join(".")} = ${valueText(value)}` +
             eol +
             output.slice(insertAt);
         }
