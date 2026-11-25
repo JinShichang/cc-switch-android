@@ -28,6 +28,11 @@
 2. 点击「连接」，在系统文件选择器侧栏选择 Codex，授权整个 `.codex` 目录。
 3. 添加供应商并点击「启用」，写入完成后重启 Codex 生效。切换前无需关闭 Codex。
 
+
+<img src="img/ccswreadme.webp" width="100%" />
+
+
+
 「历史推理与ID过滤（解决不同源错误）」位于路由、聚合选项卡下方，两种模式共用开关；直连时暂停过滤。启用时按提示解除后台限制。
 
 构建方法见 [构建说明](docs/build.md)，对接要求见 [Codex 目录授权说明](docs/codex-provider-contract.md)。
