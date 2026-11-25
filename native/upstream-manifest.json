@@ -804,7 +804,9 @@
     {
       "path": "proxy/privacy_filter/gitleaks.toml",
       "sha256": "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf",
-      "substitutions": []
+      "substitutions": [
+        "Gitleaks Google allowlist literals -> equivalent singleton regex classes; rule matching unchanged"
+      ]
     },
     {
       "path": "proxy/privacy_filter/mod.rs",

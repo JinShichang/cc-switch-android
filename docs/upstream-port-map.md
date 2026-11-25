@@ -24,3 +24,5 @@ tools/sync-upstream-core.py 可从指定参考仓库重新生成 native/vendor�
 SAF 无法操作 Codex 宿主钥匙串、启动终端或安全迁移正在使用的 guest SQLite 历史数据库；这些操作没有伪装成成功。会话删除和桌面进程操作也未完成移植，需分别评估现有宿主接口。
 
 共享上游模块中的 Gemini、agy OAuth 客户端常量不随源码分发，改为可选的本地构建环境变量 CCSWITCH_GEMINI_OAUTH_CLIENT_ID / CCSWITCH_GEMINI_OAUTH_CLIENT_SECRET、CCSWITCH_AGY_OAUTH_CLIENT_ID / CCSWITCH_AGY_OAUTH_CLIENT_SECRET；未设置时不执行对应的 token 交换或刷新。Android 不提供这些客户端功能，Codex 的认证、配置及用量逻辑不受影响。
+
+Gitleaks 规则中 Google API Key 白名单的公开值和示例值使用等效单字符类正则表示，匹配范围与上游一致，避免仓库扫描将白名单内容误报为应用密钥。同步脚本会保留此转换，其他规则不变。

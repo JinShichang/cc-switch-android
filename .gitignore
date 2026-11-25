@@ -10,6 +10,7 @@ android/app/src/main/assets/web/
 *.aab
 *.log
 .local/
+__pycache__/
 .idea/
 native/target/
 android/app/src/main/jniLibs/

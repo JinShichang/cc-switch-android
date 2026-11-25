@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import shutil
+from gitleaks_allowlist import prepare_gitleaks_config
 
 PROJECT = Path(__file__).resolve().parents[1]
 UPSTREAM = PROJECT.parent / "references" / "cc-switch"
@@ -218,6 +219,9 @@ pub(crate) fn matches_current(state: &AppState, provider: &Provider) -> Result<b
             # to the other app's guest process namespace; callers get explicit
             # unsupported errors through the platform command adapter.
             target.write_text(text, encoding="utf-8", newline="\n")
+        elif str(relative).replace("\\", "/") == "proxy/privacy_filter/gitleaks.toml":
+            target.write_text(prepare_gitleaks_config(text), encoding="utf-8", newline="\n")
+            substitutions.append("Gitleaks Google allowlist literals -> equivalent singleton regex classes; rule matching unchanged")
         else:
             target.write_bytes(raw)
         manifest.append({"path": str(relative).replace("\\", "/"),
