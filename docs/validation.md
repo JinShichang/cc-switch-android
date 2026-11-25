@@ -1,4 +1,29 @@
-# 0.4.0 验证记录
+# 0.4.1 目录连接修复
+
+ADB 诊断确认：手机安装的是 0.4.0 / versionCode 6，系统已授予来自 Codex 的持久目录读写权限（persisted=0x3）。这只能证明授权成功，不能证明 CC Switch 已保存目录或已完成配置切换。
+
+首次连接会先调用 Android 适配层的 `suspendDocuments`。它无条件停止尚未启动的代理，原版 `ProxyService::stop` 返回“代理服务器未运行”，导致尚未保存目录 URI 就中断。退出路由后的二次停止也有同一问题。
+
+0.4.1 保留上游停止逻辑，在 Android 适配层采用上游模式控制器同样的 `is_running` 判断。未启动或已停止时直接完成清理；实际运行中的停止错误继续报告。没有修改 Codex、SAF 写入方式或配置业务规则。
+
+连接流程增加 `CCSwitchConnection` 阶段日志，只记录授权接受、保存、绑定、初始化与完成，以及失败阶段/异常类型，不记录 URI、配置内容或密钥。
+
+原生集成测试先在旧代码上复现 `suspendDocuments: 代理服务器未运行`，修复后全流程通过，新增覆盖首次绑定前重复清理、直连启动不依赖代理、回到直连后再次停止。回归前后日志位于交付工作区 `../builds/cc-switch-android/logs/connection-regression-0.4.1-before.log` 和 `connection-regression-0.4.1-after.log`。
+
+手机已结束诊断连接，修复版的实际目录连接仍需覆盖安装后重新选择 `.codex` 验证。此前失败发生在 URI 保存前，即使系统已保留权限也需要再次选择目录。
+
+| 0.4.1 产物 | 结果 |
+| --- | --- |
+| APK | cc-switch-android-0.4.1.apk，25,286,329 字节 |
+| 版本 | 0.4.1 / versionCode 7，ARM64，Android 11+，targetSdk 37 |
+| SHA-256 | fae88ab2446f94a60a3362ac4c0d9ddc5dc663b94db09cd7938be60d882b0234 |
+| 验证 | 原生集成回归通过；类型检查、lint、APK v2 签名、zipalign 和原生 ELF 的 16 KB 对齐通过 |
+| 签名 | 沿用 0.4.0 证书，可覆盖安装 |
+| 构建日志 | ../builds/cc-switch-android/logs/build-20261125-104421.log（交付工作区） |
+
+本补丁重新运行有变化的原生集成测试；前端及旧 Java 解析辅助代码没有变化，未重复运行上一版的 38 项 TypeScript / 15 项 Android 单元测试。
+
+## 0.4.0 验证记录
 
 测试 APK 基于 CC Switch 4.0.40（aaf6ee963927ea0173e53ac00c1919840948ab22）。此次未修改 Codex 工程。主机集成测试使用实际上游代码和模拟文档提供方；浏览器使用合成数据，均不能代替手机 SAF 验证。
 

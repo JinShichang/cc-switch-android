@@ -72,7 +72,20 @@ fn upstream_codex_saf_workflow(){
     call("saveProviders",json!({"providers":[]}));
     docs.revoked.store(false,Ordering::SeqCst);
     println!("PASS upgrade migrates login stash, custom endpoints, usage settings/prices and unbound profile saves");
+    // The Android directory picker suspends the old transport before it saves
+    // the first grant. No proxy exists on a fresh install; cleanup must succeed
+    // without writing client files or requiring a foreground router service.
+    let writes_before=docs.writes.lock().unwrap().len();
+    assert_eq!(call("get_proxy_status",json!({}))["running"],false);
+    call("suspendDocuments",json!({}));
+    call("suspendDocuments",json!({}));
+    call("stopListener",json!({}));
+    assert_eq!(docs.writes.lock().unwrap().len(),writes_before);
     call("bindDocuments",json!({"uri":"content://test/tree/A"}));
+    call("startup",json!({}));
+    assert_eq!(call("get_app_mode",json!({}))["mode"],"direct");
+    assert_eq!(call("get_proxy_status",json!({}))["running"],false);
+    println!("PASS first directory grant completes while the upstream proxy is stopped");
     let initialized=call("initializeProviders",json!({}));
     assert!(initialized["providers"].as_array().unwrap().iter().any(|p|p["id"]=="default"));
     let first_count=initialized["providers"].as_array().unwrap().len();
@@ -177,6 +190,10 @@ fn upstream_codex_saf_workflow(){
     call("set_auto_failover_enabled",json!({"enabled":false}));
     assert!(api::call("add_to_failover_queue",json!({"providerId":"codex-official"})).is_err());
     call("setMode",json!({"mode":"direct"}));
+    call("stop_proxy_with_restore",json!({}));
+    call("stop_proxy_server",json!({}));
+    call("stopListener",json!({}));
+    assert_eq!(call("get_proxy_status",json!({}))["running"],false);
     println!("PASS upstream Stack add/remove, failover queue and return to direct");
     // Exact original parser and SQLite queries: a cached SAF session is joined
     // with real proxy logs and re-imported without inflating its token count.

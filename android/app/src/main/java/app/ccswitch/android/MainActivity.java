@@ -40,6 +40,7 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final String ORIGIN = "https://appassets.androidplatform.net";
     private static final String START = ORIGIN + "/assets/web/index.html";
+    private static final String CONNECTION_LOG = "CCSwitchConnection";
     private static final int TREE_PICKER = 41, IMPORT_PICKER = 42, EXPORT_PICKER = 43;
     private static final int GRANTS = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -431,29 +432,40 @@ public final class MainActivity extends Activity {
         Uri uri = intent.getData();
         int flags = intent.getFlags() & GRANTS;
         io.execute(() -> {
+            String connectionStage = "grant";
             try {
                 Object output;
                 if (request == TREE_PICKER) {
                     if (flags != GRANTS) throw new AppFailure("insufficient_grant", "所选目录没有同时授予读写权限，请重新授权。");
                     getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    connectionStage = "directory_info";
                     TreeAccess access = new TreeAccess(this, uri);
                     JSONObject info = access.info();
+                    android.util.Log.i(CONNECTION_LOG, "Persistent directory read/write grant accepted");
                     if (info.optBoolean("isCodexProvider") && !info.optString("name").equals(".codex")) {
                         if (!uri.toString().equals(preferences.getString("uri", ""))) getContentResolver().releasePersistableUriPermission(uri, GRANTS);
                         throw new AppFailure("wrong_codex_root", "请选择 Codex 提供的整个 .codex 目录，不能选择它下面的子目录。");
                     }
                     String previousUri = preferences.getString("uri", "");
                     if(!previousUri.equals(uri.toString())){
+                        connectionStage = "previous_connection_cleanup";
                         RouterService.stop(this);core.call("suspendDocuments",new JSONObject());
                     }
+                    connectionStage = "save_directory";
                     if (!preferences.edit().putString("uri", uri.toString()).putString("name", info.getString("name")).commit()) throw new AppFailure("preferences_write", "无法保存持久目录授权。");
+                    android.util.Log.i(CONNECTION_LOG, "Directory connection saved");
+                    connectionStage = "bind_directory";
                     core.bind(uri.toString());
+                    connectionStage = "startup";
                     core.startup();
                     if (!previousUri.isEmpty() && !previousUri.equals(uri.toString())) {
                         try { getContentResolver().releasePersistableUriPermission(Uri.parse(previousUri), GRANTS); } catch (SecurityException ignored) { }
                     }
+                    connectionStage = "initialize_providers";
                     core.call("initializeProviders",new JSONObject());
+                    connectionStage = "state";
                     output = state();
+                    android.util.Log.i(CONNECTION_LOG, "Directory connection ready");
                 } else if (request == IMPORT_PICKER) {
                     output = new JSONObject().put("text", TreeAccess.utf8(TreeAccess.readUri(getContentResolver(), uri, 16 * 1024 * 1024)));
                 } else {
@@ -463,7 +475,13 @@ public final class MainActivity extends Activity {
                     output = new JSONObject().put("saved", true);
                 }
                 success(call, output);
-            } catch (Exception error) { failure(call, error); }
+            } catch (Exception error) {
+                // Log the stage and error type only; URIs, config/auth bytes and
+                // exception messages can contain private paths or credentials.
+                if (request == TREE_PICKER) android.util.Log.w(CONNECTION_LOG,
+                    "Directory connection failed at " + connectionStage + ": " + error.getClass().getSimpleName());
+                failure(call, error);
+            }
         });
     }
 

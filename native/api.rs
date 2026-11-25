@@ -148,6 +148,18 @@ fn bootstrap() -> Result<Value, String> {
     }))
 }
 
+// Android lifecycle and document-grant cleanup may run before a listener was
+// started, or after the upstream mode controller already stopped it. Match
+// the controller's is_running guard; leave ProxyService::stop's contract intact.
+fn stop_proxy_if_running(state: &AppState) -> Result<(), String> {
+    crate::platform::async_runtime::block_on(async {
+        if state.proxy_service.is_running().await {
+            state.proxy_service.stop().await?;
+        }
+        Ok(())
+    })
+}
+
 pub fn call(command: &str, args: Value) -> Result<Value, String> {
     let _guard = CALL_LOCK.lock().map_err(|_| "原生操作锁已失效，请重新打开 CC Switch")?;
     let state = state()?;
@@ -176,7 +188,7 @@ pub fn call(command: &str, args: Value) -> Result<Value, String> {
                 // scoped pending intent for the next grant to that same tree.
                 let _ = crate::platform::async_runtime::block_on(crate::mode::controller::exit(state, &AppType::Codex));
             }
-            crate::platform::async_runtime::block_on(state.proxy_service.stop())?;
+            stop_proxy_if_running(state)?;
             Ok(json!(true))
         }
         "startup" => {
@@ -337,10 +349,10 @@ pub fn call(command: &str, args: Value) -> Result<Value, String> {
         "set_proxy_stack_member" => encoded(crate::platform::async_runtime::block_on(crate::mode::controller::set_stack_member(state,&AppType::Codex,required(&args,"providerId")?,args["enabled"].as_bool().unwrap_or(false))).map_err(|e|e.message)?),
         "get_proxy_status" => encoded(crate::platform::async_runtime::block_on(state.proxy_service.get_status())?),
         "start_proxy_server" => encoded(crate::platform::async_runtime::block_on(state.proxy_service.start())?),
-        "stop_proxy_server" => { crate::platform::async_runtime::block_on(crate::mode::controller::exit(state,&AppType::Codex))?;crate::platform::async_runtime::block_on(state.proxy_service.stop())?;Ok(json!(true)) }
+        "stop_proxy_server" => { crate::platform::async_runtime::block_on(crate::mode::controller::exit(state,&AppType::Codex))?;stop_proxy_if_running(state)?;Ok(json!(true)) }
         "detach" => {crate::platform::async_runtime::block_on(crate::mode::controller::detach_all(state));Ok(json!(true))}
-        "stopListener" => {crate::platform::async_runtime::block_on(state.proxy_service.stop())?;Ok(json!(true))}
-        "stop_proxy_with_restore" => {crate::platform::async_runtime::block_on(crate::mode::controller::exit(state,&AppType::Codex))?;crate::platform::async_runtime::block_on(state.proxy_service.stop())?;Ok(json!(true))}
+        "stopListener" => {stop_proxy_if_running(state)?;Ok(json!(true))}
+        "stop_proxy_with_restore" => {crate::platform::async_runtime::block_on(crate::mode::controller::exit(state,&AppType::Codex))?;stop_proxy_if_running(state)?;Ok(json!(true))}
         "get_global_proxy_config" => encoded(crate::platform::async_runtime::block_on(state.db.get_global_proxy_config()).map_err(|e|e.to_string())?),
         "update_global_proxy_config" => {
             let config=serde_json::from_value(args["config"].clone()).map_err(|e|e.to_string())?;
