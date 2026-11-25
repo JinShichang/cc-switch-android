@@ -19,7 +19,7 @@ bash tools/native-notices.sh
 
 源码已包含生成的 native/vendor 和许可证，不需要先克隆上游。更新基线时才运行 tools/sync-upstream-core.py，读取 ../references/cc-switch 并记录来源 hash 与平台替换。native-notices.sh 从缓存的 Cargo 锁定依赖收集版权，缺失的 workspace 许可证由已提交的 licenses/native 补齐。
 
-随后 npm run build 和 Android assembleRelease / lintRelease / testDebugUnitTest 生成 APK。build.ps1 自动运行这些步骤；核心已验证且未变化时可使用 -SkipCoreBuild。可用 -Tooling 指定 Windows 工具目录；其中需包含 jdk21/、android-sdk/、gradle/，Node/npm 需在 PATH。输出位于 ../builds/cc-switch-android/，日志位于 logs/。
+随后 npm run build 和 Android assembleRelease / lintRelease / testDebugUnitTest 生成 APK。build.ps1 自动运行这些步骤；核心已构建时可使用 -SkipCoreBuild。只改原生库、Web 资源已构建且源码未变化时可使用 -SkipWebBuild；相应测试已通过且测试输入未变化时可使用 -SkipTests。可用 -Tooling 指定 Windows 工具目录；其中需包含 jdk21/、android-sdk/、gradle/，Node/npm 需在 PATH。输出位于 ../builds/cc-switch-android/，日志位于 logs/。
 
 签名沿用本地 .tooling/cc-switch-android-user/debug.keystore。CCSWITCH_SIGNING_KEYSTORE、CCSWITCH_SIGNING_STORE_PASSWORD、CCSWITCH_SIGNING_KEY_ALIAS、CCSWITCH_SIGNING_KEY_PASSWORD 可指定其他本地密钥。源码不包含签名私钥或用户密钥。未签名的 Gradle 产物不能覆盖安装。
 

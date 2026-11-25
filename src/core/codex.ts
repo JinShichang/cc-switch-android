@@ -306,7 +306,6 @@ export function validateProvider(value: unknown): Provider {
     websiteUrl: string(value.websiteUrl),
     icon: string(value.icon),
     iconColor: string(value.iconColor),
-    historyFilter: value.historyFilter === true,
     category: authKind === "official" ? "official" : "custom",
     authKind,
     notes: string(value.notes).slice(0, 2000),
@@ -315,6 +314,7 @@ export function validateProvider(value: unknown): Provider {
     updatedAt: Date.now(),
   };
   // Remove the obsolete Android-only selector from older saves and imports.
+  delete result.historyFilter;
   delete result.meta?.androidLoginPolicy;
   delete result.meta?.preserveCodexOfficialAuthOnSwitch;
   if (result.settingsConfig.modelCatalog) {
@@ -387,7 +387,6 @@ export function matchProvider(
     )?.[1];
     const managed = token ? snapshot.filteredRoutes?.[token] : undefined;
     if (
-      provider.historyFilter &&
       managed?.providerId === provider.id &&
       currentTable?.experimental_bearer_token === token &&
       currentTable
@@ -429,8 +428,6 @@ export function matchProvider(
         summary.providerId !== "openai" &&
         canonical(currentTable) === canonical(expected.route);
     }
-    if (provider.historyFilter && !managed) matchesRoute = false;
-    if (!provider.historyFilter && managed) matchesRoute = false;
     const managedCatalog = modelCatalog(provider);
     if (managedCatalog && expected.top.model_catalog_json === undefined) expected.top.model_catalog_json = managedCatalog.name;
     const fields = { ...expected.top, ...expected.extra };
@@ -537,7 +534,6 @@ export function captureCurrent(snapshot: Snapshot, name: string): Provider {
   }
   const provider = newProvider(kind);
   provider.name = name;
-  provider.historyFilter = !!filteredRoute;
   provider.meta = filteredRoute?.isFullUrl ? { isFullUrl: true } : {};
   provider.settingsConfig = {
     config: stringify(template),
@@ -698,7 +694,7 @@ export function importProviders(text: string): {
         );
       if (row?.historyFilter)
         warnings.push(
-          `第 ${i + 1} 项：包含历史过滤设置；应用后需要 CC Switch 持续后台运行。`,
+          `第 ${i + 1} 项：旧版历史过滤开关已改为路由/聚合的公共设置，请在模式页重新设置。`,
         );
       const item = validateProvider(row);
       // Always create new local identities; import cannot silently replace a key.
@@ -718,7 +714,9 @@ export function exportProviders(
   providers: Provider[],
   includeKeys: boolean,
 ): string {
-  const rows = providers.map((p) => {
+  const rows = providers.map((provider) => {
+    const p = { ...provider };
+    delete p.historyFilter;
     if (includeKeys) return p;
     const doc = parseConfig(p.settingsConfig.config);
     // Remove arbitrary header/query/auth material, not just OPENAI_API_KEY.

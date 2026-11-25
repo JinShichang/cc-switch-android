@@ -55,18 +55,27 @@ fn upstream_codex_saf_workflow(){
     let token=format!("test.{payload}.test");
     let login=json!({"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{"access_token":token,"id_token":token,"refresh_token":"TEST_ONLY_REFRESH","account_id":"fixture-workspace"},"last_refresh":"2026-11-24T00:00:00Z"}).to_string();
     docs.put("auth.json",&login);
-    let legacy=json!({"providers":[],"loginStashes":{"content://test/tree/A":{"logins":{"account:fixture-workspace":serde_json::from_str::<Value>(&login).unwrap()},"last":"account:fixture-workspace","version":1}},"uiData":{"settings":{"usageDashboardRefreshIntervalMs":120000},"pricing":[{"modelId":"migration-fixture","displayName":"Migration fixture","inputCostPerMillion":"1","outputCostPerMillion":"2","cacheReadCostPerMillion":"0.5","cacheCreationCostPerMillion":"0"}]}});
-    api::initialize(dir.path().to_path_buf(),docs.clone(),legacy).unwrap();
+    let legacy=json!({"providers":[row("legacy-history","https://example.invalid/v1","gpt-5.5",true)],"loginStashes":{"content://test/tree/A":{"logins":{"account:fixture-workspace":serde_json::from_str::<Value>(&login).unwrap()},"last":"account:fixture-workspace","version":1}},"uiData":{"settings":{"usageDashboardRefreshIntervalMs":120000},"pricing":[{"modelId":"migration-fixture","displayName":"Migration fixture","inputCostPerMillion":"1","outputCostPerMillion":"2","cacheReadCostPerMillion":"0.5","cacheCreationCostPerMillion":"0"}]}});
+    api::initialize(dir.path().to_path_buf(),docs.clone(),legacy.clone()).unwrap();
     assert!(platform::document_state_for("content://test/tree/A").unwrap().join("codex-login-stash.json").is_file());
     assert_eq!(call("get_settings",json!({}))["usageDashboardRefreshIntervalMs"],120000);
     assert!(call("get_model_pricing",json!({})).as_array().unwrap().iter().any(|row|row["modelId"]=="migration-fixture"));
     call("bindDocuments",json!({"uri":""}));
     docs.revoked.store(true,Ordering::SeqCst);
-    let mut offline=row("offline","https://example.invalid/v1","gpt-5.5",false);
+    let filter=call("get_history_filter_status",json!({}));
+    assert_eq!(filter["enabled"],true,"legacy provider flags migrate into the shared setting");
+    assert_eq!(filter["active"],false);assert_eq!(filter["mode"],"direct");
+    call("set_history_filter_enabled",json!({"enabled":false}));
+    api::initialize(dir.path().to_path_buf(),docs.clone(),legacy).unwrap();
+    assert_eq!(call("get_history_filter_status",json!({}))["enabled"],false,"initialization must not re-enable a migrated setting");
+    assert!(api::call("set_history_filter_enabled",json!({"enabled":"true"})).is_err());
+    let mut offline=row("offline","https://example.invalid/v1","gpt-5.5",true);
     offline["meta"]=json!({"customEndpoints":["https://one.example.invalid/v1"],"autoSelect":true});
     call("saveProvider",json!({"provider":offline}));
+    assert_eq!(call("get_history_filter_status",json!({}))["enabled"],false,"provider saves must not control the routing filter");
     let saved=call("bootstrap",json!({}));
     let saved=saved["providers"].as_array().unwrap().iter().find(|p|p["id"]=="offline").unwrap();
+    assert!(saved.get("historyFilter").is_none());
     assert_eq!(saved["meta"]["endpointAutoSelect"],true);
     assert_eq!(saved["meta"]["custom_endpoints"]["https://one.example.invalid/v1"]["url"],"https://one.example.invalid/v1");
     call("saveProviders",json!({"providers":[]}));
@@ -86,11 +95,47 @@ fn upstream_codex_saf_workflow(){
     assert_eq!(call("get_app_mode",json!({}))["mode"],"direct");
     assert_eq!(call("get_proxy_status",json!({}))["running"],false);
     println!("PASS first directory grant completes while the upstream proxy is stopped");
+    let state=api::state().unwrap();
+    state.db.ensure_official_seed_by_id("codex-official",cc_switch_android_core::AppType::Codex).unwrap();
     let initialized=call("initializeProviders",json!({}));
-    assert!(initialized["providers"].as_array().unwrap().iter().any(|p|p["id"]=="default"));
+    assert_eq!(initialized["providers"].as_array().unwrap().len(),1);
+    assert_eq!(initialized["providers"][0]["id"],"codex-official");
     let first_count=initialized["providers"].as_array().unwrap().len();
     assert_eq!(call("initializeProviders",json!({}))["providers"].as_array().unwrap().len(),first_count);
-    println!("PASS initial upstream live import and official seed are idempotent");
+    println!("PASS upstream startup predicate skips default when an official seed already exists");
+    // Reproduce the extra untouched official row imported by Android 0.4.0/1.
+    // Migrate records and pointers without rewriting either client file.
+    let imported_settings=json!({"auth":serde_json::from_str::<Value>(&login).unwrap(),"config":ORIGINAL});
+    state.db.save_provider(&cc_switch_android_core::AppType::Codex,&serde_json::from_value(json!({
+        "id":"default","name":"default","category":"official","settingsConfig":imported_settings,
+    })).unwrap()).unwrap();
+    call("switch_provider",json!({"id":"default"}));
+    let config_before=docs.text("config.toml");
+    let auth_before=docs.text("auth.json");
+    let writes_before=docs.writes.lock().unwrap().len();
+    let migrated=call("initializeProviders",json!({}));
+    assert!(migrated["providers"].as_array().unwrap().iter().all(|p|p["id"]!="default"));
+    assert_eq!(migrated["currentProviderId"],"codex-official");
+    assert_eq!(migrated["providers"][0]["settingsConfig"],imported_settings);
+    assert_eq!(docs.text("config.toml"),config_before);
+    assert_eq!(docs.text("auth.json"),auth_before);
+    assert_eq!(docs.writes.lock().unwrap().len(),writes_before);
+    assert!(platform::document_state_directory().unwrap().join("migrations/duplicate-official-default.json").is_file());
+    call("initializeProviders",json!({}));
+    println!("PASS duplicate official default merges into the official card without client writes");
+    // A row named default is not enough evidence to remove a user's profile.
+    for extra in [json!({"category":"custom"}),json!({"category":"official","notes":"User's own profile"}),json!({"category":"official","meta":{"billingMultiplier":"2"}})] {
+        let mut candidate=json!({"id":"default","name":"default","category":"official","settingsConfig":imported_settings});
+        candidate.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        state.db.save_provider(&cc_switch_android_core::AppType::Codex,&serde_json::from_value(candidate.clone()).unwrap()).unwrap();
+        let writes_before=docs.writes.lock().unwrap().len();
+        let kept=call("initializeProviders",json!({}));
+        let kept=kept["providers"].as_array().unwrap().iter().find(|p|p["id"]=="default").unwrap();
+        assert_eq!(kept["settingsConfig"],candidate["settingsConfig"]);
+        assert_eq!(docs.writes.lock().unwrap().len(),writes_before);
+        state.db.delete_provider(&cc_switch_android_core::AppType::Codex,"default").unwrap();
+    }
+    println!("PASS third-party and edited default profiles remain intact");
     call("saveProvider",json!({"provider":row("A","http://127.0.0.1:1/v1","gpt-5.5",false)}));
     call("saveProvider",json!({"provider":row("B","http://127.0.0.1:2/v1","gpt-5.5",false)}));
     let view=call("get_provider_editor_view",json!({"provider":row("A","http://127.0.0.1:1/v1","gpt-5.5",false)}));
@@ -104,7 +149,7 @@ fn upstream_codex_saf_workflow(){
     assert_eq!(parsed["projects"]["/home/codex/workspace"]["trust_level"].as_str(),Some("trusted"));
     assert_eq!(call("get_current_matches",json!({}))["A"],"exact");
     assert!(docs.text("auth.json").is_none(),"upstream default stashes native login when switching to third party");
-    call("switch_provider",json!({"id":"default"}));
+    call("switch_provider",json!({"id":"codex-official"}));
     assert_eq!(serde_json::from_str::<Value>(&docs.text("auth.json").unwrap()).unwrap(),serde_json::from_str::<Value>(&login).unwrap());
     println!("PASS real upstream route/key projection, unrelated fields and official login stash/restore");
     *docs.fail.lock().unwrap()=Some("config.toml".into());
@@ -144,33 +189,69 @@ fn upstream_codex_saf_workflow(){
     call("savePrompts",json!({"prompts":[]}));
     println!("PASS original MCP field conversion/removal and prompt backup/enable/disable");
 
+    let writes_before=docs.writes.lock().unwrap().len();
+    let filter=call("set_history_filter_enabled",json!({"enabled":true}));
+    assert_eq!(filter["enabled"],true);assert_eq!(filter["active"],false);assert_eq!(filter["mode"],"direct");
+    assert_eq!(docs.writes.lock().unwrap().len(),writes_before);
+    assert_eq!(call("get_proxy_status",json!({}))["running"],false);
+    println!("PASS shared filter switch does not turn direct mode into a proxy or change client files");
+
     // Real upstream streaming proxy; captured upstream body checks exact filter
     // boundaries, including tool call_id and nested IDs.
     let server=TcpListener::bind("127.0.0.1:0").unwrap();let port=server.local_addr().unwrap().port();
-    let captured=Arc::new(Mutex::new(None::<Value>));let capture=captured.clone();
+    let captured=Arc::new(Mutex::new(Vec::<Value>::new()));let capture=captured.clone();
     let worker=std::thread::spawn(move||{
+        for _ in 0..4 {
         let (mut socket,_)=server.accept().unwrap();socket.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
         let mut bytes=Vec::new();let mut buffer=[0u8;4096];
         let (head,len)=loop{let count=socket.read(&mut buffer).unwrap();assert!(count>0);bytes.extend_from_slice(&buffer[..count]);if let Some(head)=bytes.windows(4).position(|w|w==b"\r\n\r\n"){let text=String::from_utf8_lossy(&bytes[..head]);let len=text.lines().find_map(|l|l.to_lowercase().strip_prefix("content-length:").map(|v|v.trim().parse::<usize>().unwrap())).unwrap();break(head+4,len);}};
         while bytes.len()<head+len{let count=socket.read(&mut buffer).unwrap();assert!(count>0);bytes.extend_from_slice(&buffer[..count]);}
-        *capture.lock().unwrap()=Some(serde_json::from_slice(&bytes[head..head+len]).unwrap());
+        capture.lock().unwrap().push(serde_json::from_slice(&bytes[head..head+len]).unwrap());
         let events="event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_test\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"fixture\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_test\",\"model\":\"gpt-5.5\",\"usage\":{\"input_tokens\":15,\"output_tokens\":3,\"input_tokens_details\":{\"cached_tokens\":5}}}}\n\n";
         write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",events.len(),events).unwrap();
+        }
     });
-    let relay=row("relay",&format!("http://127.0.0.1:{port}/v1"),"gpt-5.5",true);
+    let relay=row("relay",&format!("http://127.0.0.1:{port}/v1"),"gpt-5.5",false);
     call("saveProvider",json!({"provider":relay}));
     let socket=TcpListener::bind("127.0.0.1:0").unwrap();let free=socket.local_addr().unwrap().port();drop(socket);
     let mut config=call("get_global_proxy_config",json!({}));config["listenPort"]=json!(free);
     call("update_global_proxy_config",json!({"config":config}));
     call("setMode",json!({"mode":"route","providerId":"relay"}));
+    assert_eq!(call("get_history_filter_status",json!({}))["active"],true);
     let status=call("get_proxy_status",json!({}));assert_eq!(status["running"],true);
     let listen=status["port"].as_u64().unwrap();
     let request=json!({"model":"gpt-5.5","stream":true,"store":true,"include":["reasoning.encrypted_content","message.output_text"],"reasoning":{"effort":"high"},"input":[{"type":"reasoning","id":"reasoning_id","encrypted_content":"opaque"},{"type":"message","role":"user","id":"message_id","content":[{"type":"input_text","text":"fixture","id":"nested_id"}]},{"type":"function_call","id":"item_id","call_id":"call_keep","name":"tool","arguments":"{}"},{"type":"function_call_output","id":"output_id","call_id":"call_keep","output":"fixture"}]});
     let body=platform::async_runtime::block_on(async{let response=reqwest::Client::new().post(format!("http://127.0.0.1:{listen}/v1/responses")).header("Authorization","Bearer fixture").json(&request).send().await.unwrap();assert!(response.status().is_success(),"{}",response.status());response.text().await.unwrap()});
-    assert!(body.contains("response.output_text.delta")&&body.contains("resp_test"));worker.join().unwrap();
-    let body=captured.lock().unwrap().clone().unwrap();assert_eq!(body["store"],false);assert_eq!(body["reasoning"]["effort"],"high");assert_eq!(body["input"].as_array().unwrap().len(),3);assert!(body["input"][0].get("id").is_none());assert_eq!(body["input"][0]["content"][0]["id"],"nested_id");assert_eq!(body["input"][1]["call_id"],"call_keep");
+    assert!(body.contains("response.output_text.delta")&&body.contains("resp_test"));
+    let body=captured.lock().unwrap()[0].clone();assert_eq!(body["store"],false);assert_eq!(body["reasoning"]["effort"],"high");assert_eq!(body["input"].as_array().unwrap().len(),3);assert!(body["input"][0].get("id").is_none());assert_eq!(body["input"][0]["content"][0]["id"],"nested_id");assert_eq!(body["input"][1]["call_id"],"call_keep");
     println!("PASS upstream SSE proxy, optional filter, nested IDs and call_id preservation");
     call("setMode",json!({"mode":"stack","providerId":"relay"}));
+    assert_eq!(call("get_history_filter_status",json!({}))["mode"],"stack");
+    assert_eq!(call("get_history_filter_status",json!({}))["active"],true);
+    let filter=call("set_history_filter_enabled",json!({"enabled":false}));
+    assert_eq!(filter["active"],false);assert_eq!(filter["mode"],"stack");
+    call("saveProvider",json!({"provider":row("stack-filter",&format!("http://127.0.0.1:{port}/v1"),"gpt-5.5",false)}));
+    call("set_proxy_stack_member",json!({"providerId":"stack-filter","enabled":true}));
+    let stack=call("get_proxy_stack",json!({}));
+    let member=stack["members"].as_array().unwrap().iter().find(|member|member["providerId"]=="stack-filter").unwrap();
+    let mut member_request=request.clone();member_request["model"]=member["modelIds"][0].clone();
+    assert!(member_request["model"].as_str().unwrap().starts_with("ccs-"));
+    let send_member=||platform::async_runtime::block_on(async{let response=reqwest::Client::new().post(format!("http://127.0.0.1:{listen}/v1/responses")).header("Authorization","Bearer fixture").json(&member_request).send().await.unwrap();assert!(response.status().is_success(),"{}",response.status());assert!(response.text().await.unwrap().contains("response.completed"));});
+    send_member();
+    let unfiltered=captured.lock().unwrap()[1].clone();
+    assert_eq!(unfiltered["input"].as_array().unwrap().len(),4);
+    assert_eq!(unfiltered["input"][0]["type"],"reasoning");assert_eq!(unfiltered["input"][1]["id"],"message_id");
+    call("set_history_filter_enabled",json!({"enabled":true}));
+    send_member();
+    let filtered=captured.lock().unwrap()[2].clone();
+    assert_eq!(filtered["input"].as_array().unwrap().len(),3);assert!(filtered["input"][0].get("id").is_none());
+    assert_eq!(filtered["model"],"gpt-5.5");assert_eq!(filtered["reasoning"]["effort"],"high");assert_eq!(filtered["input"][1]["call_id"],"call_keep");
+    let image_request=json!({"model":"gpt-5.5","prompt":"A synthetic standalone image request"});
+    platform::async_runtime::block_on(async{let response=reqwest::Client::new().post(format!("http://127.0.0.1:{listen}/v1/images/generations")).header("Authorization","Bearer fixture").json(&image_request).send().await.unwrap();assert!(response.status().is_success());let _=response.text().await.unwrap();});
+    worker.join().unwrap();
+    assert_eq!(captured.lock().unwrap()[3],image_request,"Responses history filter must not modify standalone protocols");
+    call("set_proxy_stack_member",json!({"providerId":"stack-filter","enabled":false}));
+    println!("PASS Stack member requests share the switch; disabling retains history, enabling filters without changing mode");
     let mut stack_settings=call("get_settings",json!({}));
     stack_settings["codexProxyWithoutOfficialLogin"]=json!(true);
     *docs.fail.lock().unwrap()=Some("config.toml".into());
@@ -190,6 +271,7 @@ fn upstream_codex_saf_workflow(){
     call("set_auto_failover_enabled",json!({"enabled":false}));
     assert!(api::call("add_to_failover_queue",json!({"providerId":"codex-official"})).is_err());
     call("setMode",json!({"mode":"direct"}));
+    let filter=call("get_history_filter_status",json!({}));assert_eq!(filter["enabled"],true);assert_eq!(filter["active"],false);
     call("stop_proxy_with_restore",json!({}));
     call("stop_proxy_server",json!({}));
     call("stopListener",json!({}));
@@ -222,7 +304,7 @@ fn upstream_codex_saf_workflow(){
     println!("PASS original session token parser, incremental deduplication, prices and native dashboard");
     println!("PASS original session metadata, transcript, portable source and FTS search");
     // Pending intents and native login caches are isolated across trees.
-    call("switch_provider",json!({"id":"default"}));
+    call("switch_provider",json!({"id":"codex-official"}));
     *docs.fail.lock().unwrap()=Some("config.toml".into());let _=api::call("switch_provider",json!({"id":"A"}));
     assert_eq!(call("bootstrap",json!({}))["pendingRecovery"],true);
     docs.select("B");docs.put("config.toml","# Tree B must remain unchanged\n");call("bindDocuments",json!({"uri":"content://test/tree/B"}));

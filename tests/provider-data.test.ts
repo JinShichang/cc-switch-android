@@ -9,7 +9,8 @@ test('provider export/import preserves complete raw TOML, auth and model metadat
   const output=importProviders(exportProviders([provider],true));
   assert.equal(output.providers[0].settingsConfig.config,provider.settingsConfig.config);
   assert.equal(output.providers[0].settingsConfig.auth.OPENAI_API_KEY,'TEST_ONLY_KEY');
-  assert.equal(output.providers[0].historyFilter,true);assert.equal(output.providers[0].meta?.billingMultiplier,'2.5');
+  assert.equal(output.providers[0].historyFilter,undefined);assert.equal(output.providers[0].meta?.billingMultiplier,'2.5');
+  assert(!exportProviders([provider],true).includes('historyFilter'));
 });
 test('key-free export and display redact bearer values and authentication objects',()=>{
   const provider=newProvider();provider.name='Test provider';provider.settingsConfig.auth={OPENAI_API_KEY:'TEST_ONLY_KEY'};

@@ -144,7 +144,7 @@ test("catalog preserves per-model reasoning and changes content address after ed
   p.settingsConfig.modelCatalog.models[0].contextWindow = 512000;
   assert.notEqual(modelCatalog(p)!.name, cat.name);
 });
-test("provider round trip retains metadata, catalog and filter switch", () => {
+test("provider round trip retains metadata and catalog while retiring the per-provider filter switch", () => {
   const p = newProvider();
   p.name = "fixture";
   p.meta = {
@@ -156,7 +156,7 @@ test("provider round trip retains metadata, catalog and filter switch", () => {
   p.settingsConfig.modelCatalog = { models: [{ model: "fixture" }] };
   const saved = validateProvider(p);
   assert.deepEqual(saved.meta, p.meta);
-  assert.equal(saved.historyFilter, true);
+  assert.equal(saved.historyFilter, undefined);
   assert.deepEqual(
     saved.settingsConfig.modelCatalog,
     p.settingsConfig.modelCatalog,

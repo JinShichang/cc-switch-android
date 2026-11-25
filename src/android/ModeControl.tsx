@@ -18,6 +18,7 @@ import {getRoutingReason} from '../vendor/utils/routingReason';
 import {stackSubagentSettings,stackSubagentValue} from '../vendor/components/providers/mode/StackSubagentFields';
 import type {Settings} from '../vendor/types';
 import {queueMoveSortUpdates} from '../vendor/utils/queueSort';
+import {HistoryFilterControl} from './FilterControl';
 
 export async function ensureRouterBackground(){
   const status=await invoke<{unrestricted:boolean;notifications:boolean}>('backgroundStatus');
@@ -71,6 +72,7 @@ export function ModeControl({providers,onChanged,onView,onError,onApplyRequest}:
       failover={view==='route'?{enabled:failover,disabled:busy,onChange:enabled=>void change(()=>native('set_auto_failover_enabled',{enabled})).catch(()=>{})}:undefined}
       onOpenRouteSettings={view==='route'?()=>setRouteSettings(true):undefined}
       onOpenStackSettings={view==='stack'?()=>setStackSettings(true):undefined}/>
+    {view!=='direct'&&<HistoryFilterControl onError={onError}/>}
     {view!==mode.mode&&<div className="mode-entry"><p>{view==='direct'?'回到直连后，写回直连供应商配置。':view==='route'?'通过本机路由转发请求，可按队列故障转移。':'多个供应商的模型合并到 Codex 模型菜单，选择后直达对应供应商。'}</p><Button disabled={busy||!isNative} onClick={()=>setDialog(view==='direct'?{kind:'exit'}:{kind:'enter',target:view})}>{view==='direct'?'回到直连…':view==='route'?'进入路由模式…':'进入聚合模式…'}</Button></div>}
     {view!=='direct'&&<p className="text-caption text-fg-2 px-3 py-2">本机中转需要允许 CC Switch 后台运行。切换后可以再重启 Codex 加载配置。</p>}
     {mode.mode!=='direct'&&stale&&(stale.auth||stale.others||stale.daemon)&&<div role="status" className="rounded-control bg-warning-soft px-3 py-2 text-caption text-warning-text">

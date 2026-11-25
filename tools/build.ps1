@@ -4,6 +4,7 @@ param(
     [switch]$Offline,
     [switch]$SkipTests,
     [switch]$SkipCoreBuild,
+    [switch]$SkipWebBuild,
     [string]$WslDistribution = 'Ubuntu',
     [string]$WslUser = 'cdx'
 )
@@ -60,7 +61,7 @@ try {
         if($Offline){$taskTestArgs+='--offline'}
         Invoke-Logged 'wsl.exe' $taskTestArgs
     }
-    Invoke-Logged 'npm.cmd' @('run', 'build')
+    if (!$SkipWebBuild) { Invoke-Logged 'npm.cmd' @('run', 'build') }
     Push-Location (Join-Path $taskRoot 'android')
     try {
         $taskGradleArgs = @('--console=plain', ':app:assembleRelease', ':app:lintRelease')

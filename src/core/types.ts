@@ -18,6 +18,7 @@ export interface Provider {
   websiteUrl?: string;
   icon?: string;
   iconColor?: string;
+  /** Legacy backup input only; filter settings now belong to routing modes. */
   historyFilter?: boolean;
   category: "custom" | "official";
   authKind: AuthKind;

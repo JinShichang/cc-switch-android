@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import type { Provider, ProviderEditorBase } from "./core/types";
 import { validateProvider } from "./core/codex";
 import { parseConfig } from "./core/tomlPatch";
 import { canonical } from "./core/tomlPatch";
-import { invoke, isNative } from "./bridge";
 import { FullScreenPanel } from "./vendor/components/common/FullScreenPanel";
 import { BasicFormFields } from "./vendor/components/providers/forms/BasicFormFields";
 import { CodexFormFields } from "./vendor/components/providers/forms/CodexFormFields";
@@ -12,16 +11,7 @@ import CodexConfigEditor from "./vendor/components/providers/forms/CodexConfigEd
 import { useCodexConfigState } from "./vendor/components/providers/forms/hooks/useCodexConfigState";
 import { Form } from "./vendor/components/ui/form";
 import { Button } from "./vendor/components/ui/button";
-import { Switch } from "./vendor/components/ui/switch";
 import { ConfirmDialog } from "./vendor/components/ConfirmDialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "./vendor/components/ui/dialog";
 import {
   parseBodyOverrideJson,
   parseHeaderOverrideJson,
@@ -34,7 +24,6 @@ import type {
   ClaudeApiKeyField,
 } from "./vendor/types";
 export { Modal } from "./Modal";
-export const FILTER_NAME = "历史推理与ID过滤（解决不同源错误）";
 export function ProviderEditor({
   provider,
   shownProvider = provider,
@@ -83,9 +72,7 @@ export function ProviderEditor({
     setMeta((prev) => ({ ...prev, [key]: value }));
   const official=provider.category==='official';
   const bound=meta.authBinding?.source==='managed_account'&&meta.authBinding.authProvider==='codex_oauth'?meta.authBinding.accountId??null:null;
-  const [filter, setFilter] = useState(provider.historyFilter === true),
-    [prompt, setPrompt] = useState(false),
-    [softIssues, setSoftIssues] = useState<string[]|null>(null),
+  const [softIssues, setSoftIssues] = useState<string[]|null>(null),
     [error, setError] = useState(""),
     [endpointModal, setEndpointModal] = useState(false);
   const [headers, setHeaders] = useState(
@@ -94,43 +81,6 @@ export function ProviderEditor({
     [body, setBody] = useState(
       JSON.stringify(meta.localProxyRequestOverrides?.body ?? {}, null, 2),
     );
-  const [power, setPower] = useState<{
-    unrestricted: boolean;
-    notifications: boolean;
-  } | null>(null);
-  const checkPower = () => {
-    if (isNative)
-      invoke("backgroundStatus")
-        .then(setPower)
-        .catch(() => {});
-  };
-  useEffect(() => {
-    checkPower();
-    window.addEventListener("focus", checkPower);
-    window.addEventListener("ccswitch-resume", checkPower);
-    const listener = () => {
-      if (!document.hidden) checkPower();
-    };
-    document.addEventListener("visibilitychange", listener);
-    return () => {
-      window.removeEventListener("focus", checkPower);
-      window.removeEventListener("ccswitch-resume", checkPower);
-      document.removeEventListener("visibilitychange", listener);
-    };
-  }, []);
-  const enable = async (settings: boolean) => {
-    setFilter(true);
-    setPrompt(false);
-    if (isNative) {
-      try {
-        await invoke("requestNotifications");
-        if (settings) await invoke("openBatterySettings");
-        checkPower();
-      } catch (e) {
-        setError(String(e));
-      }
-    }
-  };
   let configError = "";
   try {
     parseConfig(c.codexConfig);
@@ -189,7 +139,6 @@ export function ProviderEditor({
             ...meta,
             localProxyRequestOverrides: { headers: h.headers, body: b.value },
           },
-          historyFilter: filter,
         }),
         editorBase ? { base: editorBase, config: c.codexConfig } : undefined,
       );
@@ -305,45 +254,6 @@ export function ProviderEditor({
             localProxyBodyOverride={body}
             onLocalProxyBodyOverrideChange={setBody}
           />
-          <section className="rounded-panel border p-3 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <label htmlFor="history-filter" className="font-medium">
-                {FILTER_NAME}
-              </label>
-              <Switch
-                id="history-filter"
-                checked={filter}
-                onCheckedChange={(v) =>
-                  v ? setPrompt(true) : setFilter(false)
-                }
-              />
-            </div>
-            <p className="text-caption text-fg-2">
-              应用此方案后，Codex 请求经 CC Switch
-              本机中转，移除历史推理项及可重建条目的
-              ID。保留本轮思考强度、正文及工具
-              call_id。加密压缩上下文无法安全转换时会报错。
-            </p>
-            {filter && (
-              <>
-                <p className="text-caption text-fg-2">
-                  需要持续后台运行。开启后应用供应商会启用上游路由；在路由和聚合模式下，过滤开关作用于后续请求。关闭开关后，可在模式页回到直连。
-                </p>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setPrompt(true)}
-                >
-                  后台运行设置
-                  {power
-                    ? power.unrestricted
-                      ? " · 已解除电池优化"
-                      : " · 需检查电池限制"
-                    : ""}
-                </Button>
-              </>
-            )}
-          </section>
           <CodexConfigEditor
             authValue={c.codexAuth}
             configValue={c.codexConfig}
@@ -364,48 +274,6 @@ export function ProviderEditor({
         message={(softIssues??[]).map(issue=>`• ${issue}`).join('\n')+'\n\n仍要保存吗？保存后切换此供应商时可能失败，可以之后再补全。'}
         confirmText="仍要保存" cancelText="取消" pending={busy}
         onConfirm={()=>{setSoftIssues(null);void save(true);}} onCancel={()=>setSoftIssues(null)}/>
-      <Dialog open={prompt} onOpenChange={setPrompt}>
-        <DialogContent
-          zIndex="top"
-          className="max-w-[calc(100vw-24px)] sm:max-w-lg"
-        >
-          <DialogHeader>
-            <DialogTitle>允许 CC Switch 持续后台运行</DialogTitle>
-            <DialogDescription>
-              开启“{FILTER_NAME}”后，CC Switch 需要作为本机路由持续运行。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-auto overflow-y-auto space-y-3 text-body px-5">
-            <p>
-              请在系统设置中允许后台活动，并将 CC Switch
-              的电池使用设为“不受限制”或关闭电池优化。若一加系统提供自启动、后台冻结限制，也请允许。
-            </p>
-            <p>
-              请允许通知，以显示中转运行状态。锁屏、系统清理或手动强制停止应用可能中断
-              Codex 请求；后台设置不能保证进程永不被系统终止。
-            </p>
-            <p>
-              此功能无法跨供应商复用加密压缩历史。出现相关提示时，请用文本摘要开启新会话。
-            </p>
-            {power && (
-              <p>
-                系统电池优化：{power.unrestricted ? "已豁免" : "尚未豁免"}
-                ；通知：{power.notifications ? "已允许" : "尚未允许"}
-                。厂商后台限制需要你在设置中检查。
-              </p>
-            )}
-          </div>
-          <DialogFooter className="flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setPrompt(false)}>
-              取消
-            </Button>
-            <Button variant="secondary" onClick={() => void enable(false)}>
-              已了解，开启
-            </Button>
-            <Button onClick={() => void enable(true)}>开启并前往设置</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </FullScreenPanel>
   );
 }

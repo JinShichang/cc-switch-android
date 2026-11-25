@@ -2,6 +2,38 @@
 //! Remove only Responses history reasoning items and top-level item IDs;
 //! tool call_id, current request settings, and response IDs stay intact.
 use serde_json::Value;
+const SETTING: &str = "android_codex_history_filter";
+
+pub(crate) fn migrate(db: &crate::database::Database) -> Result<(), crate::error::AppError> {
+    if db.get_setting(SETTING)?.is_none() {
+        let mut enabled = false;
+        for id in db.get_provider_ids(&crate::app_config::AppType::Codex)? {
+            if db.get_setting(&format!("android_history_filter:{id}"))?.as_deref() == Some("true") {
+                enabled = true;
+                break;
+            }
+        }
+        db.set_setting(SETTING, if enabled { "true" } else { "false" })?;
+    }
+    Ok(())
+}
+
+pub(crate) fn enabled(db: &crate::database::Database) -> Result<bool, crate::error::AppError> {
+    Ok(db.get_setting(SETTING)?.as_deref() == Some("true"))
+}
+
+pub(crate) fn set_enabled(db: &crate::database::Database, enabled: bool) -> Result<(), crate::error::AppError> {
+    db.set_setting(SETTING, if enabled { "true" } else { "false" })
+}
+
+pub(crate) fn status(state: &crate::store::AppState) -> Result<Value, String> {
+    let mode = crate::mode::controller::app_mode_view(state, &crate::app_config::AppType::Codex)?;
+    let enabled = enabled(&state.db).map_err(|error| error.to_string())?;
+    let running = crate::platform::async_runtime::block_on(state.proxy_service.is_running());
+    Ok(serde_json::json!({"enabled": enabled, "active": enabled && mode.mode != "direct" && mode.attached && running,
+        "mode": mode.mode, "attached": mode.attached, "running": running}))
+}
+
 pub(crate) fn apply(body: &mut Value) -> Result<(), crate::proxy::ProxyError> {
     use crate::proxy::ProxyError;
     fn truthy(value:Option<&Value>)->bool { match value { None|Some(Value::Null)|Some(Value::Bool(false))=>false,Some(Value::String(s))=>!s.is_empty(),Some(Value::Number(n))=>n.as_f64()!=Some(0.0),_=>true } }

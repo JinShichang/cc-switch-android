@@ -107,6 +107,7 @@ pub fn initialize(home: std::path::PathBuf, documents: Arc<dyn crate::platform::
             }
             state.db.set_setting("android_migrated_v1", "true").map_err(|e| e.to_string())?;
         }
+        crate::history_filter::migrate(&state.db).map_err(|e| e.to_string())?;
         STATE.set(state).map_err(|_| "原生状态重复初始化")?;
         HANDLE.set(handle).map_err(|_| "原生事件重复初始化")?;
     }
@@ -119,10 +120,12 @@ fn set_filter(state: &AppState, id: &str, enabled: bool) -> Result<(), String> {
 pub(crate) fn filter_enabled(db: &Database, id: &str) -> bool {
     db.get_setting(&format!("android_history_filter:{id}")).ok().flatten().as_deref() == Some("true")
 }
-pub(crate) fn filter_for(id:&str)->bool { STATE.get().is_some_and(|state|filter_enabled(&state.db,id)) }
-fn public_provider(state: &AppState, row: &Provider) -> Value {
+pub(crate) fn filter_for(_: &str)->bool {
+    STATE.get().is_some_and(|state|crate::mode::current::is_proxy(&AppType::Codex)
+        && crate::history_filter::enabled(&state.db).unwrap_or(false))
+}
+fn public_provider(_: &AppState, row: &Provider) -> Value {
     let mut value = serde_json::to_value(row).unwrap_or_default();
-    value["historyFilter"] = Value::Bool(filter_enabled(&state.db, &row.id));
     value["authKind"] = json!(if row.has_official_category() { "official" } else if row.settings_config["config"].as_str().unwrap_or("").contains("env_key") { "env" } else { "apiKey" });
     value["updatedAt"] = json!(chrono::Utc::now().timestamp_millis());
     value
@@ -169,6 +172,13 @@ pub fn call(command: &str, args: Value) -> Result<Value, String> {
     let model = optional(&args,"model");
     match command {
         "bootstrap" => bootstrap(),
+        "get_history_filter_status" => crate::history_filter::status(state),
+        "set_history_filter_enabled" => {
+            let enabled = args["enabled"].as_bool().ok_or("过滤开关必须为布尔值")?;
+            crate::history_filter::set_enabled(&state.db, enabled).map_err(|e|e.to_string())?;
+            crate::platform::emit_event("history-filter-changed", &json!({"enabled": enabled}));
+            crate::history_filter::status(state)
+        }
         "list_sessions" | "get_session_messages" | "getSessionTranscript" | "get_session_block_content" | "get_session_image" | "search_session_content" | "sync_session_index" | "clear_session_index" => crate::session_api::call(command,&args),
         "bindDocuments" => {
             let identity = args["uri"].as_str().unwrap_or("");
@@ -180,6 +190,7 @@ pub fn call(command: &str, args: Value) -> Result<Value, String> {
                 let mode=crate::mode::state::ModeState{mode:Some(crate::mode::state::Mode::Direct),..Default::default()};
                 crate::mode::operation::commit_target(&state.db,&store,"codex",&crate::mode::state::PendingTarget::mode(mode)).map_err(|e|e.to_string())?;
             }
+            crate::provider_initialization::merge_duplicate_official_default(state).map_err(|e|e.to_string())?;
             bootstrap()
         }
         "suspendDocuments" => {
@@ -193,19 +204,14 @@ pub fn call(command: &str, args: Value) -> Result<Value, String> {
         }
         "startup" => {
             crate::mode::operation::settle(&state.db,"codex").map_err(|e|e.to_string())?;
+            crate::provider_initialization::merge_duplicate_official_default(state).map_err(|e|e.to_string())?;
             crate::platform::async_runtime::block_on(crate::mode::controller::startup(state));
             let failures=crate::mode::controller::take_startup_attach_failures();
             if !failures.is_empty(){return Err(failures.iter().map(|f|f.error.as_str()).collect::<Vec<_>>().join("；"));}
             bootstrap()
         }
         "initializeProviders" => {
-            if state.db.get_setting("android_initial_import_v1").map_err(|e|e.to_string())?.is_none() {
-                if !state.db.has_non_official_seed_provider(&AppType::Codex).map_err(|e|e.to_string())? {
-                    crate::services::provider::import_default_config(state,AppType::Codex).map_err(|e|e.to_string())?;
-                }
-                state.db.ensure_official_seed_by_id(crate::database::CODEX_OFFICIAL_PROVIDER_ID,AppType::Codex).map_err(|e|e.to_string())?;
-                state.db.set_setting("android_initial_import_v1","true").map_err(|e|e.to_string())?;
-            }
+            crate::provider_initialization::initialize(state).map_err(|e|e.to_string())?;
             bootstrap()
         }
         "get_provider_editor_view" => {
@@ -299,11 +305,9 @@ pub fn call(command: &str, args: Value) -> Result<Value, String> {
             let row=provider(row_value)?;
             let context: Option<EditorSave> = if args["editor"].is_object() { Some(serde_json::from_value(args["editor"].clone()).map_err(|e|e.to_string())?) } else { None };
             let exists=state.db.provider_exists(&row.id,&AppType::Codex).map_err(|e|e.to_string())?;
-            let id = row.id.clone();
             if !crate::platform::documents_bound() { ProviderService::add_without_switching(state,AppType::Codex,row).map_err(|e|e.to_string())?; }
             else if exists { ProviderService::update_from_editor(state,AppType::Codex,None,row,context).map_err(|e|e.to_string())?; }
             else { ProviderService::add_from_editor(state,AppType::Codex,row,false,context).map_err(|e|e.to_string())?; }
-            set_filter(state,&id,row_value["historyFilter"].as_bool().unwrap_or(false))?;
             bootstrap()
         }
         "saveProviders" => {
@@ -319,7 +323,6 @@ pub fn call(command: &str, args: Value) -> Result<Value, String> {
                         ProviderService::update(state,AppType::Codex,None,row).map_err(|e|e.to_string())?;
                     }
                 } else { ProviderService::add_without_switching(state,AppType::Codex,row).map_err(|e|e.to_string())?; }
-                set_filter(state,&id,value["historyFilter"].as_bool().unwrap_or(false))?;
                 sort_updates.push((id,index));
             }
             for id in stored.keys().filter(|id| !rows.iter().any(|r|r["id"].as_str()==Some(id.as_str()))) {

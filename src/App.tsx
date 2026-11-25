@@ -56,15 +56,12 @@ import PromptListItem from "./components/prompts/PromptListItem";
 import { useQueryClient } from "@tanstack/react-query";
 import { resetAndroidData } from "./android/commands";
 import { DataStatus } from "./android/DataStatus";
-import { ModeControl,ensureRouterBackground } from "./android/ModeControl";
+import { ModeControl } from "./android/ModeControl";
 import { providerNeedsRouting } from "./vendor/utils/providerCapabilities";
 import type { AppMode,AppModeView } from "./vendor/types/proxy";
 import { CodexOAuthSection } from "./vendor/components/providers/forms/CodexOAuthSection";
 import { SessionManagerPage } from "./vendor/components/sessions/SessionManagerPage";
 import { UsagePage } from "./vendor/components/usage/UsagePage";
-import {
-  FilterStatusPanel,
-} from "./android/FilterControl";
 import { ProviderEditor, Modal } from "./ProviderEditor";
 import { invoke, isNative } from "./bridge";
 import {
@@ -507,16 +504,11 @@ export function App() {
       if(modeView==='direct'&&currentMode.mode!=='direct'){
         setModeApplyRequest({providerId:provider.id,nonce:Date.now()});return;
       }
-      if(modeView==='direct'&&currentMode.mode==='direct'&&!provider.historyFilter&&providerNeedsRouting('codex',provider)){
+      if(modeView==='direct'&&currentMode.mode==='direct'&&providerNeedsRouting('codex',provider)){
         setModeApplyRequest({providerId:provider.id,nonce:Date.now()});return;
       }
-      if(modeView!=='direct'&&currentMode.mode==='direct'&&!provider.historyFilter){
+      if(modeView!=='direct'&&currentMode.mode==='direct'){
         setModeApplyRequest({providerId:provider.id,nonce:Date.now()});return;
-      }
-      if (provider.historyFilter) {
-        await ensureRouterBackground();
-        const mode=await invoke<AppModeView>("native",{command:"get_app_mode",payload:{}});
-        if(mode.mode==='direct')await invoke("native", { command: "setMode", payload: { mode: "route", providerId: provider.id } });
       }
       const result = await invoke<{state: AppState}>("apply", {providerId: provider.id});
       setState(result.state);
@@ -1711,7 +1703,6 @@ export function App() {
                       恢复 100%
                     </Button>
                   </Panel>
-                  <FilterStatusPanel />
                   <Panel title="外观">
                     <SegmentedControl
                       aria-label="外观"

@@ -9,6 +9,7 @@ mod commands;
 mod tray;
 mod history_filter;
 mod session_api;
+mod provider_initialization;
 pub use app_config::AppType;
 use std::fmt;
 include!("log_redaction.rs");

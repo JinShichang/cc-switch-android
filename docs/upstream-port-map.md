@@ -14,7 +14,8 @@
 | 用量脚本、定价、统计 | 原版 QuickJS、SQLite 与 model_pricing |
 | 自定义配置、会话、用量页面 | 上游 React 组件，保留字段，仅手机排列与触控适配 |
 | Android 生命周期和文档权限 | MainActivity、NativeCore、TreeAccess、RouterService、platform.rs |
-| 额外历史过滤 | history_filter.rs，按用户提供的 agentrouter 行为独立实现 |
+| 首次供应商初始化 | provider_initialization.rs 调用原版启动导入条件；旧版重复官方 default 经私有备份后合并，不写 Codex 文件 |
+| 额外历史过滤 | history_filter.rs，按用户提供的 agentrouter 行为独立实现；路由、聚合共用设置，直连暂停 |
 
 tools/sync-upstream-core.py 可从指定参考仓库重新生成 native/vendor，共 422 个文件。upstream-manifest.json 记录原始文件 hash 和平台替换。平台差异：Tauri IPC/状态/事件替换为 JNI 与 Tokio；文档 I/O 使用 SAF；设备状态按目录 URI 隔离；模型目录指针使用已约定 guest 路径；只启用 Codex；无法探测其他应用进程时提示用户重启。其他 agent 的依赖模块可能仍被编译，但不提供选项或写入它们的文件。
 

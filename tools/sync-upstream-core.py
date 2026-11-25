@@ -140,7 +140,7 @@ for module in ROOT_MODULES:
                 text = text.replace("#[cfg(not(unix))]\nfn read_process_table", "#[cfg(any(not(unix), target_os = \"android\"))]\nfn read_process_table")
                 substitutions.append("Android process visibility -> unknown; requires user restart, no false runtime confirmation")
             if key == "proxy/forwarder.rs":
-                text = text.replace("let original_model = body.get(\"model\").cloned();", "let mut body = body;\n        if crate::api::filter_for(&provider.id) {\n            if endpoint.split('?').next().is_some_and(|path| path.trim_end_matches('/').ends_with(\"/responses/compact\")) { return Err(ProxyError::InvalidRequest(\"历史过滤不能迁移加密压缩，请使用文本摘要开启新会话\".into())); }\n            crate::history_filter::apply(&mut body)?;\n        }\n        let original_model = body.get(\"model\").cloned();")
+                text = text.replace("let original_model = body.get(\"model\").cloned();", "let mut body = body;\n        if matches!(app_type, AppType::Codex) && super::providers::is_codex_responses_endpoint(endpoint) && crate::api::filter_for(&provider.id) {\n            if endpoint.split('?').next().is_some_and(|path| path.trim_end_matches('/').ends_with(\"/responses/compact\")) { return Err(ProxyError::InvalidRequest(\"历史过滤不能迁移加密压缩，请使用文本摘要开启新会话\".into())); }\n            crate::history_filter::apply(&mut body)?;\n        }\n        let original_model = body.get(\"model\").cloned();")
                 substitutions.append("User-requested opt-in reasoning/item-ID filter before upstream request preparation")
             if key == "mode/controller.rs":
                 text = text.replace('let apps = || AppType::all().filter(|app| app.spec().route_mode);', 'let apps = || [AppType::Codex].into_iter();')

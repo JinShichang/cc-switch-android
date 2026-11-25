@@ -1503,7 +1503,7 @@ impl RequestForwarder {
         }
 
         let mut body = body;
-        if crate::api::filter_for(&provider.id) {
+        if matches!(app_type, AppType::Codex) && super::providers::is_codex_responses_endpoint(endpoint) && crate::api::filter_for(&provider.id) {
             if endpoint.split('?').next().is_some_and(|path| path.trim_end_matches('/').ends_with("/responses/compact")) { return Err(ProxyError::InvalidRequest("历史过滤不能迁移加密压缩，请使用文本摘要开启新会话".into())); }
             crate::history_filter::apply(&mut body)?;
         }
