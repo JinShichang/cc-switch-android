@@ -42,6 +42,7 @@ import {
 import { Sidebar } from "./components/shell/Sidebar";
 import { AppPageHeader } from "./components/shell/AppPageHeader";
 import { AppGlyph } from "./components/shell/AppGlyph";
+import { ProviderIconBox } from "./vendor/components/ProviderIconBox";
 import { SkillsIcon } from "./components/BrandIcons";
 import { Button } from "./components/ui/button";
 import { SegmentedControl } from "./components/ui/segmented-control";
@@ -68,7 +69,6 @@ import {
   exportProviders,
   formValues,
   importProviders,
-  matchProvider,
   newProvider,
   readSummary,
   redactConfig,
@@ -98,6 +98,7 @@ import {
 } from "./core/workspace";
 import thirdPartyNotices from "../THIRD_PARTY_NOTICES.txt?raw";
 import logo from "./assets/icons/logo.svg";
+import { version } from "../package.json";
 
 const EMPTY: AppState = {
   providers: [],
@@ -397,6 +398,15 @@ export function App() {
     queryClient.removeQueries({ queryKey: ["sessions"] });
     queryClient.removeQueries({ queryKey: ["usage"] });
   }, [state.directory?.uri, queryClient]);
+  useEffect(() => {
+    if (!state.directory || snapshot ||
+      !(view === "mcp" || (view === "providers" && providerTab === "current"))) return;
+    let alive = true;
+    invoke<Snapshot>("readCurrent").then(live => {
+      if (alive) setSnapshot(live);
+    }).catch(e => { if (alive) setError(message(e)); });
+    return () => { alive = false; };
+  }, [state.directory?.uri, snapshot, view, providerTab]);
   const navigate = (next: View) => {
     if (busyRef.current) return;
     setView(next);
@@ -499,7 +509,7 @@ export function App() {
     setState(await invoke<AppState>("savePrompts", { prompts }));
   const applyProvider = (provider: Provider) =>
     action("正在切换供应商…", async () => {
-      if (!snapshot) throw new Error("请先授权目录并读取配置。");
+      if (!state.directory) throw new Error("请先授权 Codex 目录。");
       const currentMode=await invoke<AppModeView>("native",{command:"get_app_mode",payload:{}});
       if(modeView==='direct'&&currentMode.mode!=='direct'){
         setModeApplyRequest({providerId:provider.id,nonce:Date.now()});return;
@@ -512,6 +522,7 @@ export function App() {
       }
       const result = await invoke<{state: AppState}>("apply", {providerId: provider.id});
       setState(result.state);
+      setSnapshot(null);
       window.dispatchEvent(new Event('provider-data-changed'));
       setNotice("配置文件已保存。重启 Codex 后在新会话中确认服务商与模型。");
     });
@@ -775,7 +786,7 @@ export function App() {
           items={[
             {
               label: "从当前配置导入",
-              disabled: !snapshot,
+              disabled: !state.directory,
               onClick: importCurrent,
             },
             { label: "导入方案文件", onClick: importFile },
@@ -927,7 +938,7 @@ export function App() {
           )}
           {view === "providers" && (
             <>
-              {state.directory&&<ModeControl providers={state.providers} onView={setModeView} onError={setError} onApplyRequest={modeApplyRequest} onChanged={async()=>{setState(await invoke<AppState>('bootstrap'));setNotice('配置已按上游规则应用；客户端文件有变化时，重启 Codex 后加载。');}}/>}
+              {state.directory&&<ModeControl providers={state.providers} onView={setModeView} onError={setError} onApplyRequest={modeApplyRequest} onChanged={async()=>{setState(await invoke<AppState>('bootstrap'));setSnapshot(null);setNotice('配置已按上游规则应用；客户端文件有变化时，重启 Codex 后加载。');}}/>}
               <div className="page-toolbar">
                 <SegmentedControl
                   aria-label="供应商视图"
@@ -1021,31 +1032,28 @@ export function App() {
                         const values = formValues(provider);
                         const isCurrent =
                           state.currentProviderId === provider.id;
-                        const match = snapshot
-                          ? snapshot.nativeMatches ? snapshot.nativeMatches[provider.id] ?? "different" : matchProvider(snapshot, provider)
-                          : "none";
                         return (
                           <article
                             className={
                               "provider-row " +
-                              (match === "exact" || isCurrent ? "current" : "")
+                              (isCurrent ? "current" : "")
                             }
                             key={provider.id}
                           >
                             <div className="provider-identity">
-                              <span className="provider-glyph">
-                                {provider.authKind === "official" ? (
-                                  <AppGlyph size={21} />
-                                ) : (
-                                  <Server size={21} />
-                                )}
-                              </span>
+                              <ProviderIconBox
+                                icon={provider.icon?.trim() || undefined}
+                                name={provider.name}
+                                color={provider.iconColor}
+                                className="bg-surface text-fg-1"
+                                fallbackClassName="bg-transparent text-fg-2"
+                              />
                               <div className="min-w-0">
                                 <div className="row-title">
                                   <strong>{provider.name}</strong>
-                                  {(match === "exact" || isCurrent) && (
+                                  {isCurrent && (
                                     <span className="badge success">
-                                      {isCurrent ? "当前方案" : "当前文件"}
+                                      当前方案
                                     </span>
                                   )}
                                 </div>
@@ -1070,14 +1078,14 @@ export function App() {
                                 size="compact"
                                 disabled={
                                   busy ||
-                                  !snapshot ||
+                                  !state.directory ||
                                   !!configError ||
                                   state.pendingRecovery
                                 }
                                 onClick={() => applyProvider(provider)}
                               >
-                                {match === "exact" ? <Check size={14} /> : null}
-                                {match === "exact" ? "已启用" : "启用"}
+                                {isCurrent ? <Check size={14} /> : null}
+                                {isCurrent ? "已启用" : "启用"}
                               </Button>
                               <Button
                                 variant="quiet"
@@ -1093,7 +1101,7 @@ export function App() {
                                 items={[
                                   {
                                     label: "预览修改",
-                                    disabled: !snapshot,
+                                    disabled: !state.directory,
                                     onClick: () => previewProvider(provider),
                                   },
                                   {
@@ -1915,7 +1923,7 @@ export function App() {
                     <img src={logo} width={42} height={42} alt="CC Switch" />
                     <div>
                       <strong>CC Switch</strong>
-                      <p className="muted">0.3.1 · Android · Codex</p>
+                      <p className="muted">{version} · Android · Codex</p>
                     </div>
                   </div>
                   <p className="muted">
@@ -1975,6 +1983,7 @@ export function App() {
                 } : undefined,
               });
               setState(result.state);
+              setSnapshot(null);
               setProviderEditor(null);
               setNotice("供应商已保存。当前方案的设置按上游规则写入；需要时重启 Codex 加载。");
             })
