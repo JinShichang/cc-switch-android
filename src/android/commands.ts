@@ -270,7 +270,31 @@ export async function androidCommand(
   command: string,
   args: Record<string, any> = {},
 ): Promise<any> {
+  if(isNative&&['list_sessions','get_session_messages','get_session_block_content','get_session_image','search_session_content','sync_session_index','clear_session_index'].includes(command))return invoke('native',{command,payload:args});
+  if(isNative&&command==='stream_session_messages'){
+    const parsed=await invoke<any>('native',{command:'getSessionTranscript',payload:{sourcePath:args.sourcePath}});
+    args.onChunk.onmessage({type:'header',total:parsed.messages.length,turns:parsed.turns,cached:parsed.cached,parseMs:parsed.parseMs});
+    for(let start=0;start<parsed.messages.length;start+=60)args.onChunk.onmessage({type:'messages',start,messages:parsed.messages.slice(start,start+60)});
+    args.onChunk.onmessage({type:'done',payloadBytes:parsed.payloadBytes});return;
+  }
+  if(isNative && (command.startsWith('auth_') || command.startsWith('get_usage') || [
+    'get_provider_stats','get_model_stats','get_request_logs','get_request_detail','get_session_usage_summary',
+    'sync_session_usage','rebuild_codex_usage','get_session_usage_last_sync','get_model_pricing',
+    'update_model_pricing','update_model_pricing_batch','delete_model_pricing','get_models_dev_sync_config',
+    'save_models_dev_sync_config','record_models_dev_sync_result','fetch_models_dev','fetch_models_dev_data',
+    'get_subscription_quota','get_codex_oauth_quota','get_codex_oauth_models','update_provider_sort_order',
+    'get_custom_endpoints','add_custom_endpoint','remove_custom_endpoint','test_api_endpoints',
+  ].includes(command)))return invoke('native',{command,payload:args});
+  if(isNative && ["queryProviderUsage","testUsageScript","get_app_mode","get_proxy_stack","set_proxy_stack_member","set_proxy_route","get_proxy_status","get_auto_failover_enabled","set_auto_failover_enabled","get_failover_queue","add_to_failover_queue","remove_from_failover_queue","get_global_proxy_config","update_global_proxy_config","get_proxy_config_for_app","update_proxy_config_for_app","acknowledge_codex_stale_clients","adopt_codex_stack_catalog","fetch_models_for_config"].includes(command))
+    return invoke('native',{command,payload:args});
+  if(isNative&&command==='get_providers'){
+    if(args.app&&args.app!=='codex')return {};
+    const state=await invoke<any>('bootstrap');return Object.fromEntries(state.providers.map((p:any)=>[p.id,p]));
+  }
+  if(isNative&&['get_settings','codex_forces_multi_agent_v2'].includes(command))return invoke('native',{command,payload:{}});
+  if(isNative&&command==='save_settings')return invoke('native',{command,payload:args});
   switch (command) {
+    case 'open_external':return invoke('openExternal',args);
     case "get_settings":
       return (await loadUi()).settings;
     case "save_settings":

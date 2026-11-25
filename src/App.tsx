@@ -56,25 +56,23 @@ import PromptListItem from "./components/prompts/PromptListItem";
 import { useQueryClient } from "@tanstack/react-query";
 import { resetAndroidData } from "./android/commands";
 import { DataStatus } from "./android/DataStatus";
+import { ModeControl,ensureRouterBackground } from "./android/ModeControl";
+import { providerNeedsRouting } from "./vendor/utils/providerCapabilities";
+import type { AppMode,AppModeView } from "./vendor/types/proxy";
+import { CodexOAuthSection } from "./vendor/components/providers/forms/CodexOAuthSection";
 import { SessionManagerPage } from "./vendor/components/sessions/SessionManagerPage";
 import { UsagePage } from "./vendor/components/usage/UsagePage";
 import {
-  prepareFilteredProvider,
   FilterStatusPanel,
 } from "./android/FilterControl";
 import { ProviderEditor, Modal } from "./ProviderEditor";
 import { invoke, isNative } from "./bridge";
 import {
-  captureCurrent,
-  initialProviderSetup,
-  providerEditorView,
-  planProviderEditorGlobals,
   exportProviders,
   formValues,
   importProviders,
   matchProvider,
   newProvider,
-  planApply,
   readSummary,
   redactConfig,
   validateProvider,
@@ -89,7 +87,6 @@ import type { Prompt } from "./lib/api";
 import type { SettingsSection, View } from "./lib/navigation";
 import {
   aggregateUsage,
-  changeMcp,
   mcpServers,
   parseMcpImport,
   parseSession,
@@ -268,6 +265,8 @@ export function App() {
     [zoomInput, setZoomInput] = useState("100");
   const [keysIncluded, setKeysIncluded] = useState(false),
     [providerTab, setProviderTab] = useState<"list" | "current">("list");
+  const [modeView,setModeView]=useState<AppMode>('direct');
+  const [modeApplyRequest,setModeApplyRequest]=useState<{providerId:string;nonce:number}|null>(null);
   const [skillsMeta, setSkillsMeta] = useState<
     Record<string, { name: string; description: string }>
   >({});
@@ -294,15 +293,7 @@ export function App() {
   };
   const initializeProviders = async (next: AppState, live: Snapshot) => {
     if (!isNative || next.providerInitialization === 1) return next;
-    const setup = initialProviderSetup(next, live);
-    const result = await invoke<AppState>("initializeProviders", {
-      expectedRevision: live.revision,
-      expectedProviderIds: next.providers.map((p) => p.id),
-      additions: setup.additions,
-      importedId: setup.importedId,
-    });
-    if (setup.warnings.length) setError(setup.warnings.join(" "));
-    return result;
+    return await invoke<AppState>("initializeProviders", {});
   };
   const refresh = async () => {
     try {
@@ -326,11 +317,15 @@ export function App() {
         try {
           const live = await invoke<Snapshot>("readCurrent");
           setSnapshot(live);
-          const shown = providerEditorView(live, provider);
+          const view = await invoke<{settings: Provider["settingsConfig"]}>("native", {
+            command: "get_provider_editor_view", payload: { provider },
+          });
+          const shown = { ...provider, settingsConfig: view.settings };
           setProviderShown(shown);
           setProviderBase({
             snapshot: live,
             config: shown.settingsConfig.config,
+            auth: shown.settingsConfig.auth,
           });
         } catch (e) {
           setProviderLoadNotice(
@@ -352,6 +347,7 @@ export function App() {
         const next = await invoke<AppState>("bootstrap");
         if (!alive) return;
         setState(next);
+        if(next.startupError)setError(next.startupError);
         setZoomInput(String(next.settings.zoom));
         setPicker(await invoke<PickerStatus>("providerStatus"));
         if (next.directory) {
@@ -505,62 +501,33 @@ export function App() {
   const savePrompts = async (prompts: Prompt[]) =>
     setState(await invoke<AppState>("savePrompts", { prompts }));
   const applyProvider = (provider: Provider) =>
-    action("正在备份、写入并读回核对…", async () => {
+    action("正在切换供应商…", async () => {
       if (!snapshot) throw new Error("请先授权目录并读取配置。");
-      planApply(snapshot, provider);
-      const routed = await prepareFilteredProvider(provider);
-      const plan = planApply(snapshot, routed);
-      const result = await invoke<{ state: AppState; snapshot: Snapshot }>(
-        "apply",
-        {
-          providerId: provider.id,
-          config: plan.config,
-          catalog: plan.catalog,
-          ownership: plan.ownership,
-          expectedRevision: snapshot.revision,
-        },
-      );
-      let stopWarning = "";
-      if (!provider.historyFilter) {
-        try {
-          await invoke("stopFilter");
-        } catch {
-          stopWarning = "配置已恢复直连，但停止中转服务失败，请检查运行状态。";
-        }
+      const currentMode=await invoke<AppModeView>("native",{command:"get_app_mode",payload:{}});
+      if(modeView==='direct'&&currentMode.mode!=='direct'){
+        setModeApplyRequest({providerId:provider.id,nonce:Date.now()});return;
       }
+      if(modeView==='direct'&&currentMode.mode==='direct'&&!provider.historyFilter&&providerNeedsRouting('codex',provider)){
+        setModeApplyRequest({providerId:provider.id,nonce:Date.now()});return;
+      }
+      if(modeView!=='direct'&&currentMode.mode==='direct'&&!provider.historyFilter){
+        setModeApplyRequest({providerId:provider.id,nonce:Date.now()});return;
+      }
+      if (provider.historyFilter) {
+        await ensureRouterBackground();
+        const mode=await invoke<AppModeView>("native",{command:"get_app_mode",payload:{}});
+        if(mode.mode==='direct')await invoke("native", { command: "setMode", payload: { mode: "route", providerId: provider.id } });
+      }
+      const result = await invoke<{state: AppState}>("apply", {providerId: provider.id});
       setState(result.state);
-      setSnapshot(result.snapshot);
-      setNotice(
-        "文件保存成功并已读回核对。请完全重启 Codex，在新会话确认服务商与模型。" +
-          plan.warnings.join(" ") +
-          stopWarning,
-      );
+      window.dispatchEvent(new Event('provider-data-changed'));
+      setNotice("配置文件已保存。重启 Codex 后在新会话中确认服务商与模型。");
     });
-  const previewProvider = (provider: Provider) => {
-    try {
-      if (!snapshot) throw new Error("请先读取当前配置。");
-      const plan = planApply(snapshot, provider);
-      setDialog({
-        title: "应用前预览",
-        body: (
-          <>
-            <p>
-              将修改：{plan.changedFields.join("、") || "内容已一致"}
-              。密钥已隐藏。
-            </p>
-            {plan.warnings.map((w) => (
-              <p key={w} className="inline-warning">
-                {w}
-              </p>
-            ))}
-            <pre className="code-view">{redactConfig(plan.config)}</pre>
-          </>
-        ),
-      });
-    } catch (e) {
-      setError(message(e));
-    }
-  };
+  const previewProvider = (provider: Provider) =>
+    action("读取上游切换预览…", async () => {
+      const view = await invoke<{settings:Provider["settingsConfig"]}>("native", {command:"get_provider_editor_view",payload:{provider}});
+      setDialog({title:"应用前预览",body:<pre className="code-view">{redactConfig(view.settings.config)}</pre>});
+    });
   const importFile = () =>
     action("选择导入文件…", async () => {
       const file = await invoke<{ text: string }>("importFile");
@@ -588,28 +555,32 @@ export function App() {
         },
       });
     });
+  const importCurrent=()=>action('读取当前配置…',async()=>{
+    const provider=await invoke<Provider>('native',{command:'captureCurrent',payload:{name:'当前配置'}});
+    setProviderShown(provider);setProviderBase(undefined);setProviderLoadNotice('当前配置由上游读取，保存时按上游编辑器规则拆分。');setProviderEditor(provider);
+  });
   const restoreConfig = (id?: string) =>
     setDialog({
       title: "恢复配置",
       body: (
         <p>
           恢复整个 config.toml，包括备份中的 MCP
-          和用户设置。先备份当前文件，再写入并核验。auth.json
-          与钥匙串保持原样；之后请重启 Codex。
+          和用户设置，并恢复新版备份中对应的 auth.json。先备份当前文件，再按上游写入流程恢复。
+          系统钥匙串仍由 Codex 管理；之后请重启 Codex。
         </p>
       ),
       label: "备份当前并恢复",
       danger: true,
       confirm: async () => {
         const live = await invoke<{ revision: string }>("readRevision");
-        const result = await invoke<{ state: AppState; snapshot: Snapshot }>(
+        const result = await invoke<{ state: AppState; snapshot?: Snapshot }>(
           id ? "restore" : "recover",
           { id, expectedRevision: live.revision },
         );
         setState(result.state);
-        setSnapshot(result.snapshot);
+        if (result.snapshot) setSnapshot(result.snapshot);
         setDialog(null);
-        setNotice("配置已恢复并读回核对。请重启 Codex。");
+        setNotice("配置已恢复。请重启 Codex。");
       },
     });
   const restoreDocument = (id: string | undefined, path: string) =>
@@ -631,7 +602,7 @@ export function App() {
         setState(await invoke<AppState>("bootstrap"));
         setPromptFile(null);
         setDialog(null);
-        setNotice("文档已恢复并读回核对，请在 Codex 新会话中确认。");
+        setNotice("文档已恢复，请在 Codex 新会话中确认。");
       },
     });
   const saveMcp = async (
@@ -639,15 +610,14 @@ export function App() {
     value: Record<string, any> | undefined,
   ) => {
     if (!snapshot) throw new Error("请先读取 config.toml。");
-    const config = changeMcp(snapshot.config ?? "", name, value);
-    const result = await invoke<{ state: AppState; snapshot: Snapshot }>(
+    const result = await invoke<{ state: AppState; snapshot?: Snapshot }>(
       "editMcp",
-      { config, expectedRevision: snapshot.revision },
+      { name, value: value ?? null },
     );
     setState(result.state);
-    setSnapshot(result.snapshot);
+    if (result.snapshot) setSnapshot(result.snapshot);
     setMcpEditor(null);
-    setNotice("MCP 配置已保存并核验。请重启 Codex 以重新加载服务。");
+    setNotice("MCP 配置已保存。请重启 Codex 以重新加载服务。");
   };
   const togglePrompt = (prompt: Prompt, enabled: boolean) => {
     if (!promptFile) {
@@ -666,15 +636,11 @@ export function App() {
       ),
       label: enabled ? "备份并启用" : "备份并停用",
       confirm: async () => {
-        const result = await invoke<TextDocument>("saveDocument", {
-          path: "AGENTS.md",
-          text: enabled ? prompt.content : "",
-          expectedHash: promptFile.hash,
-        });
-        setPromptFile(result);
-        setState(await invoke<AppState>("bootstrap"));
+        const result = await invoke<{state:AppState}>("togglePrompt", {id:prompt.id,enabled});
+        setState(result.state);
+        setPromptFile(await invoke<TextDocument>("readDocument",{path:"AGENTS.md"}));
         setDialog(null);
-        setNotice("AGENTS.md 已保存并核验。请新建 Codex 会话。");
+        setNotice("AGENTS.md 已保存。请新建 Codex 会话。");
       },
     });
   };
@@ -805,7 +771,7 @@ export function App() {
     </Empty>
   );
   const currentPrompt = (state.prompts ?? []).find(
-    (p) => p.content === promptFile?.text && p.content.length > 0,
+    (p) => p.enabled,
   );
   const totals = aggregateUsage(usageRows);
   const sessionNames = parseSessionIndex(catalog?.index ?? "");
@@ -818,13 +784,7 @@ export function App() {
             {
               label: "从当前配置导入",
               disabled: !snapshot,
-              onClick: () => {
-                try {
-                  openProviderEditor(captureCurrent(snapshot!, "当前配置"));
-                } catch (e) {
-                  setError(message(e));
-                }
-              },
+              onClick: importCurrent,
             },
             { label: "导入方案文件", onClick: importFile },
             { label: "连接目录", onClick: authorize },
@@ -967,7 +927,7 @@ export function App() {
           {state.pendingRecovery && (
             <div className="notice warning">
               <AlertTriangle size={18} />
-              <span>配置有未确认写入，请先恢复。</span>
+              <span>上次操作尚未完成，可按上游规则补完。</span>
               <Button variant="neutral" onClick={() => restoreConfig()}>
                 恢复
               </Button>
@@ -975,6 +935,7 @@ export function App() {
           )}
           {view === "providers" && (
             <>
+              {state.directory&&<ModeControl providers={state.providers} onView={setModeView} onError={setError} onApplyRequest={modeApplyRequest} onChanged={async()=>{setState(await invoke<AppState>('bootstrap'));setNotice('配置已按上游规则应用；客户端文件有变化时，重启 Codex 后加载。');}}/>}
               <div className="page-toolbar">
                 <SegmentedControl
                   aria-label="供应商视图"
@@ -1069,7 +1030,7 @@ export function App() {
                         const isCurrent =
                           state.currentProviderId === provider.id;
                         const match = snapshot
-                          ? matchProvider(snapshot, provider)
+                          ? snapshot.nativeMatches ? snapshot.nativeMatches[provider.id] ?? "different" : matchProvider(snapshot, provider)
                           : "none";
                         return (
                           <article
@@ -1214,15 +1175,7 @@ export function App() {
                         <p className="muted">{summary.auth.state}</p>
                         <Button
                           variant="neutral"
-                          onClick={() => {
-                            try {
-                              openProviderEditor(
-                                captureCurrent(snapshot, "当前配置"),
-                              );
-                            } catch (e) {
-                              setError(message(e));
-                            }
-                          }}
+                          onClick={importCurrent}
                         >
                           保存为方案
                         </Button>
@@ -1263,7 +1216,6 @@ export function App() {
                           );
                           const entries = parseMcpImport(file.text);
                           if (!snapshot) throw new Error("请刷新配置。");
-                          let config = snapshot.config ?? "";
                           for (const [name, value] of entries) {
                             if (mcps.some(([key]) => key === name))
                               throw new Error(
@@ -1271,9 +1223,7 @@ export function App() {
                                   name +
                                   "。请通过编辑修改，以免覆盖内置服务。",
                               );
-                            config = changeMcp(config, name, value);
                           }
-                          const target = config;
                           setDialog({
                             title: "导入 MCP",
                             body: (
@@ -1288,13 +1238,12 @@ export function App() {
                                 state: AppState;
                                 snapshot: Snapshot;
                               }>("editMcp", {
-                                config: target,
-                                expectedRevision: snapshot.revision,
+                                entries: entries.map(([name,value])=>({name,value})),
                               });
                               setState(result.state);
-                              setSnapshot(result.snapshot);
+                              if (result.snapshot) setSnapshot(result.snapshot);
                               setDialog(null);
-                              setNotice("MCP 已导入并核验，请重启 Codex。");
+                              setNotice("MCP 已导入，请重启 Codex。");
                             },
                           });
                         })
@@ -1634,6 +1583,7 @@ export function App() {
                 </Button>
               </div>
               <Panel title="Codex 官方登录">
+                <CodexOAuthSection showAccountQuota />
                 <dl className="details">
                   <div>
                     <dt>目录状态</dt>
@@ -1659,8 +1609,7 @@ export function App() {
                     "授权 .codex 目录后读取配置与 auth.json 的结构。"}
                 </p>
                 <p className="inline-info">
-                  钥匙串、OAuth 刷新及账号切换属于 Codex
-                  进程。目录授权无法访问钥匙串；文件中的登录材料也不等于运行中的登录状态。
+                  授权中心沿用上游托管账号登录、刷新和绑定。目录授权无法读取 Codex 宿主的钥匙串；通过文件或托管账号切换后，请重启 Codex 加载。
                 </p>
                 <Button
                   variant="neutral"
@@ -1683,8 +1632,7 @@ export function App() {
                   套 API Key 方案。
                 </p>
                 <p className="muted">
-                  密钥由 Android Keystore
-                  加密保存。可在供应商编辑器中查看和修改。
+                  供应商与托管账号采用上游存储格式，保存在 CC Switch 私有目录。可在供应商编辑器中查看和修改。
                 </p>
                 <Button variant="neutral" onClick={() => navigate("providers")}>
                   管理供应商
@@ -1895,7 +1843,7 @@ export function App() {
                             ),
                           });
                           setNotice(
-                            "方案已导出并读回核对。" +
+                            "方案已导出。" +
                               (keysIncluded
                                 ? "文件含明文密钥，请妥善保管。"
                                 : ""),
@@ -2025,78 +1973,19 @@ export function App() {
           saveError={error}
           onSave={(provider, editor) =>
             action("保存供应商…", async () => {
-              const valid = validateProvider(provider);
-              const providers = state.providers.some((p) => p.id === valid.id)
-                ? state.providers.map((p) => (p.id === valid.id ? valid : p))
-                : [...state.providers, valid];
-              let globalsChanged = false;
-              let savedCurrent = false;
-              if (editor) {
-                const live = await invoke<Snapshot>("readCurrent");
-                if (live.directory.uri !== editor.base.snapshot.directory.uri)
-                  throw new Error("授权目录已改变，请重新打开供应商编辑页。");
-                const plan = planProviderEditorGlobals(
-                  providerEditor,
-                  editor.base.config,
-                  editor.config,
-                  live.config ?? "",
-                );
-                const isExisting = state.providers.some(
-                  (p) => p.id === valid.id,
-                );
-                const currentId =
-                  state.currentProviderId ?? state.lastApplied?.id;
-                const writesKeyFields = isExisting
-                  ? currentId === valid.id
-                  : !currentId;
-                if (plan.changedFields.length || writesKeyFields) {
-                  let config = plan.config;
-                  let applyArgs: Record<string, unknown> = {};
-                  if (writesKeyFields) {
-                    // Like desktop: saving the current direct provider also
-                    // refreshes its live route in the same file transaction.
-                    const routed = await prepareFilteredProvider(valid);
-                    const applied = planApply({ ...live, config }, routed);
-                    config = applied.config;
-                    applyArgs = {
-                      applyProvider: true,
-                      providerId: valid.id,
-                      ownership: applied.ownership,
-                      catalog: applied.catalog,
-                    };
-                  }
-                  const result = await invoke<{
-                    state: AppState;
-                    snapshot: Snapshot;
-                  }>("saveProviderEditor", {
-                    providers,
-                    config,
-                    expectedRevision: live.revision,
-                    ...applyArgs,
-                  });
-                  setState(result.state);
-                  setSnapshot(result.snapshot);
-                  if (writesKeyFields && !valid.historyFilter) {
-                    try {
-                      await invoke("stopFilter");
-                    } catch {
-                      setError(
-                        "配置已保存，但停止旧中转服务失败，请检查运行状态。",
-                      );
-                    }
-                  }
-                  globalsChanged = true;
-                  savedCurrent = writesKeyFields;
-                } else await saveProviders(providers);
-              } else await saveProviders(providers);
+              if (editor && state.directory?.uri !== editor.base.snapshot.directory.uri)
+                throw new Error("授权目录已改变，请重新打开编辑器。");
+              const result = await invoke<{state:AppState}>("saveProvider", {
+                provider,
+                editor: editor ? {
+                  base: {config:editor.base.config,auth:editor.base.auth ?? {}},
+                  draft: providerEditor.settingsConfig,
+                  onConflict: "refuse",
+                } : undefined,
+              });
+              setState(result.state);
               setProviderEditor(null);
-              setNotice(
-                globalsChanged
-                  ? savedCurrent
-                    ? "供应商方案已保存，当前供应商配置已写入并读回核验。重启 Codex 后确认生效。"
-                    : "供应商方案与修改的全局设置已保存，文件已读回核验。新供应商需点击启用后切换；重启 Codex 后确认生效。"
-                  : "供应商方案已保存。启用后切换配置，再重启 Codex 生效。",
-              );
+              setNotice("供应商已保存。当前方案的设置按上游规则写入；需要时重启 Codex 加载。");
             })
           }
         />
@@ -2344,7 +2233,7 @@ export function App() {
                   setState(await invoke("bootstrap"));
                   setCatalog(await invoke("catalog", { kind: "skills" }));
                   setSkillEditor(null);
-                  setNotice("技能文档已保存并读回核对。");
+                  setNotice("技能文档已保存。");
                 })
               }
             >

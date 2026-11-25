@@ -1,9 +1,8 @@
-param([string]$Jdk = (Join-Path $PSScriptRoot '../../.tooling/jdk21'))
+param([string]$Distribution='Ubuntu',[string]$User='cdx',[switch]$Offline)
 $ErrorActionPreference = 'Stop'
 $taskProject = Split-Path $PSScriptRoot -Parent
-$taskClasses = Join-Path $taskProject '.local/native-tests'
-New-Item -ItemType Directory -Force -Path $taskClasses | Out-Null
-& (Join-Path $Jdk 'bin/javac.exe') -encoding UTF-8 -d $taskClasses (Join-Path $taskProject 'android/app/src/main/java/app/ccswitch/android/TransactionEngine.java') (Join-Path $taskProject 'tests/TransactionEngineTest.java')
-if ($LASTEXITCODE -ne 0) { throw 'Native test compilation failed' }
-& (Join-Path $Jdk 'bin/java.exe') -cp $taskClasses TransactionEngineTest
-if ($LASTEXITCODE -ne 0) { throw 'Native transaction tests failed' }
+$taskScript='/mnt/' + $taskProject.Substring(0,1).ToLowerInvariant() + $taskProject.Substring(2).Replace('\','/') + '/tools/test-core.sh'
+$taskArgs=@('-d',$Distribution,'-u',$User,'--exec','bash',$taskScript)
+if($Offline){$taskArgs+='--offline'}
+& wsl.exe @taskArgs
+if($LASTEXITCODE -ne 0){throw 'Upstream native integration tests failed'}

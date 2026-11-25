@@ -1,0 +1,2200 @@
+{
+  "version": "4.0.40",
+  "commit": "aaf6ee963927ea0173e53ac00c1919840948ab22",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "agy_config.rs",
+      "sha256": "d961874b2fc5220390c7560a77ce0a74cd62b3b93bec6feaae1c4c153b1c1eb4",
+      "substitutions": []
+    },
+    {
+      "path": "app_config.rs",
+      "sha256": "8722632f2a7b3d506658e40090e06541de918ad0d8f43f37b9422a007dfff2e5",
+      "substitutions": []
+    },
+    {
+      "path": "claude_desktop_config.rs",
+      "sha256": "fc0a8ca7c2aff44a2f27afc8a11567d663029dc57d9a8e8bce3342b1eeafa700",
+      "substitutions": [
+        "Resolve desktop-only cfg import for Android build; no desktop client exposed"
+      ]
+    },
+    {
+      "path": "claude_mcp.rs",
+      "sha256": "d5d6ccbfe584d523772a5052c5a29f44e1d020ebb693d48f148b35210d5f7237",
+      "substitutions": []
+    },
+    {
+      "path": "claude_plugin.rs",
+      "sha256": "ecb7e6683e7d470379f8dbab3dc1287d0c4dece16586d79c2bfd40ad4573b4b3",
+      "substitutions": []
+    },
+    {
+      "path": "codex_config.rs",
+      "sha256": "917c7600f6e0c1b9de8c03af7c1688a485e0c26a1326c671efd2d28e87ed5251",
+      "substitutions": [
+        "Codex configuration read -> SAF",
+        "Codex file reads and existence checks -> SAF-aware platform I/O"
+      ]
+    },
+    {
+      "path": "codex_config/tests.rs",
+      "sha256": "cdddb594c9de570c5aac685a1430090801537a417c5892d662d818141cd301f9",
+      "substitutions": []
+    },
+    {
+      "path": "codex_config/tests/reasoning_overrides.rs",
+      "sha256": "7afdc618cbb5aa818e5f795d606ceadd530aa045bfa460d66fc24fae1178ea99",
+      "substitutions": []
+    },
+    {
+      "path": "codex_history_migration.rs",
+      "sha256": "0d0aa29eca1a043d6c441b39c726880394e3614218b3a7c71083642272027911",
+      "substitutions": []
+    },
+    {
+      "path": "codex_rollout_file.rs",
+      "sha256": "ecf8abf423fee72740f8aa495fd7d508770135cafe4be6708bd57fe29fa9b7e6",
+      "substitutions": []
+    },
+    {
+      "path": "codex_state_db.rs",
+      "sha256": "7d6dcde1cc8885b2ad83bc301688f68a5ec5f521892c689f7c28250d426ed205",
+      "substitutions": []
+    },
+    {
+      "path": "config.rs",
+      "sha256": "d76433f5c33703d55dbbfef306091bee46c810d681358a085fae1aac71837d86",
+      "substitutions": [
+        "Live document I/O -> SAF; native staged files -> private Android staging directory"
+      ]
+    },
+    {
+      "path": "copilot_config.rs",
+      "sha256": "c972ebb2999b6c43379ec765efb6b33de90878fe41755c2751dbd158ded81c11",
+      "substitutions": []
+    },
+    {
+      "path": "database/backup.rs",
+      "sha256": "f491351fdd968ea4d1ae3b0ce05c319348bc3681b52f64ab236878c0a11c8eb6",
+      "substitutions": []
+    },
+    {
+      "path": "database/migration.rs",
+      "sha256": "27d0c99d8ab85e303a66658b3e379e3f8740842c9425d215c4e13187f7ee8141",
+      "substitutions": []
+    },
+    {
+      "path": "database/mod.rs",
+      "sha256": "330d9c94eeedbd6fab5b8e81bc0bf1773766f2fbc05df08b9903d175c39d53c6",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport",
+        "Database change notification -> Android event bus"
+      ]
+    },
+    {
+      "path": "database/read_cache.rs",
+      "sha256": "24489aa700ea8fde05046cacd0ec9e5653efdf792661f2e21a2274be4e752f3a",
+      "substitutions": []
+    },
+    {
+      "path": "database/schema.rs",
+      "sha256": "bc8d2cadf65e446b09c906e6e28021fbf4124c4653a4ef2ce6fed2c86845c340",
+      "substitutions": []
+    },
+    {
+      "path": "database/tests.rs",
+      "sha256": "b9426cef9ffbb0a219bfd18cf88a2ba60c56b8eecd7bbbc52273e61bb8d18617",
+      "substitutions": []
+    },
+    {
+      "path": "database/backup/tests.rs",
+      "sha256": "384047a4c190d7f9af21a46376b956b32059a7079a28e33ed8b3653354f3834f",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/custom_icons.rs",
+      "sha256": "3f0c20f5fa7dad77294f08b4009df0f4f3e77d086628b607238546487f6ea988",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/failover.rs",
+      "sha256": "2f595cb06bfc491be083b2ee2784a665fe1558c0a8a838659ef5e5ecacdfa6b6",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/mcp.rs",
+      "sha256": "777361b14e3dda5d8e000e72bc56b7b97671ce7f47bb021832782f6e83833f17",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/mod.rs",
+      "sha256": "fdcee755e27057da915e3d2fdf7cba429883e7a46c83e37362d1f60bc12c6f24",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/profiles.rs",
+      "sha256": "55811e506c7546d086df28c63fca1c11e7156704d5cce07646c3fb09160d1839",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/prompts.rs",
+      "sha256": "96843440266d4914a072a9f6f384e0abe52a6a3c3cc5dae78c350311803daa09",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/providers.rs",
+      "sha256": "1b658380939c61a606b68ccc9d43a6f2fd5f06248c31944d8f92aac69f037ded",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/providers_seed.rs",
+      "sha256": "11f96ca7ffcf2ad7c571510541b0ccc96b9c38b9449848695f292d88321ea253",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/providers_tests.rs",
+      "sha256": "b4ab08b614912c6487c66bc30eb0cc16eee48aaeebe9e063d0807a46402c3da9",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/proxy.rs",
+      "sha256": "d46faa2ca9b4e91ea4891909d571ce48eb31860e8fa9359bbd343e5a7c8ba5d0",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/settings.rs",
+      "sha256": "049ff1ee5eb1d8133d7387ef7f2654a2f6e15a3684a27911cac2b4f8dbd8ca50",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/skills.rs",
+      "sha256": "31bb8da4d668025e24319f40a29517caa430eff3890b6c006f5ede7e22e3b966",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/stream_check.rs",
+      "sha256": "4b1f0c137801c6587fc168774990bfb11907c121b4ea01b46229ed1bec32ce6b",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/universal_providers.rs",
+      "sha256": "218c889886e237c39a8042d66a141363f6ae624f786abac83667c9acc4847934",
+      "substitutions": []
+    },
+    {
+      "path": "database/dao/usage_rollup.rs",
+      "sha256": "3759a4c29077660e7bb8a4a157bab2a317a4d75390cbb7972971291314c8ba5f",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/codex_link.rs",
+      "sha256": "f99f0e54708b660cf7003e90123dcd83e0a5557516d05d5057411681eaac127f",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/grok_link.rs",
+      "sha256": "ecae5d92d26a6bcf46bd6b985eb7dbb64697968c92a487f003024e54deebab38",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/icon_fetch.rs",
+      "sha256": "031876ad1f3cad65d6fb78677c450ad939357d399a0e77c148138d35345712c7",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/mcp.rs",
+      "sha256": "a20bf7649a8566953ea68c8b7eb2192eff60dc3475969d6bfa1e9f8c4d5505c4",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/mod.rs",
+      "sha256": "f5ecfe3696206ed48f469e75487fb6442d0710b7ce5a3576dc991a50100078ca",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/parser.rs",
+      "sha256": "2369649815f38fa3d5af2848e5fe378e9bf5f8b870b5fdd6347940249b50c58d",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/prompt.rs",
+      "sha256": "137e41bf104f37402b01a7ae9a73595048bd200d033b42331d8240f24f3f7e27",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/provider.rs",
+      "sha256": "d43e0d160a3960130bc4166d490f63d91d069b343d6740cb730715633b060844",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/skill.rs",
+      "sha256": "e8b10bc8aca275ac48e6200e88dc529f3028d2e95c9178b0132d2236fb2000fb",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/tests.rs",
+      "sha256": "c6ad71e66bee89a2d101bc7d624a9fb91ac49da132759bf8a62acb5fa12e4ed9",
+      "substitutions": []
+    },
+    {
+      "path": "deeplink/utils.rs",
+      "sha256": "ef3c2c5b53a0f26fe3faa059492f15550a275bfc5ac263fee2d1f5f7675fff7b",
+      "substitutions": []
+    },
+    {
+      "path": "dsh_config.rs",
+      "sha256": "2417b75745e53476e822343907d4a0ebf84b16f8a72efb12605267819db3dc87",
+      "substitutions": []
+    },
+    {
+      "path": "error.rs",
+      "sha256": "4a9efc6cec83b71da4673a4f10f2038a8af6583ae02db5e98ee01eb8e62fd4e9",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "gemini_config.rs",
+      "sha256": "bfb159b6222ff537875ea63a6c57285936a2a201db909ea5050f608ac424af1e",
+      "substitutions": []
+    },
+    {
+      "path": "gemini_mcp.rs",
+      "sha256": "344f368e3853b9fbd221f29182c2a1f86b41dd66ab56f94f0ae7d4e27aeaa250",
+      "substitutions": []
+    },
+    {
+      "path": "grok_auth.rs",
+      "sha256": "8c83de505c49dbdf1161f23f49c417fbd8b029aa721ceddff3902c93b4b7be42",
+      "substitutions": []
+    },
+    {
+      "path": "grok_config.rs",
+      "sha256": "7e32dfa803b6da1529803aa02c199169675dc3058b8f1bd178ded53627cc34dc",
+      "substitutions": []
+    },
+    {
+      "path": "hermes_config.rs",
+      "sha256": "6e3b8bee2f205a69c1de70e4c7783448ccb9b47ab86b7dff48a70d57de7262e4",
+      "substitutions": []
+    },
+    {
+      "path": "jsonc_document.rs",
+      "sha256": "db13a3a07522d921b9cf8afe24489a2265af1074e610956d95e988d8f1be5280",
+      "substitutions": []
+    },
+    {
+      "path": "kimi_config.rs",
+      "sha256": "68c1d2c74b66fa726651c10a8165dec5d55cf061af6dd10c6eaf3a741cf33081",
+      "substitutions": []
+    },
+    {
+      "path": "kimi_session.rs",
+      "sha256": "11996952ef68bb202f4997098b1529cc15eecafa1ae22f308a95537649b1d0d6",
+      "substitutions": []
+    },
+    {
+      "path": "live/engine.rs",
+      "sha256": "9b2eff3ef716b918a72f65e7b2ea957b2d64d3415d61aec3974bf7a56f909952",
+      "substitutions": [
+        "Live reads -> SAF while pending and backup files remain native"
+      ]
+    },
+    {
+      "path": "live/floor.rs",
+      "sha256": "344db6025ba1031979222137ff8c20c9d0d456b3eafcc0de5c21da6f6e2ca7e1",
+      "substitutions": []
+    },
+    {
+      "path": "live/mod.rs",
+      "sha256": "d4dd6b29fc10bda766c4d53b26f5babbe23a77f8e9f2903c0a5806c2244b4c33",
+      "substitutions": []
+    },
+    {
+      "path": "live/residue.rs",
+      "sha256": "e6cc032c2c7901b8ca2e2dafb56ccfcfd0bd9a47aa04800776c036aa3a852825",
+      "substitutions": []
+    },
+    {
+      "path": "live/patch/dotenv.rs",
+      "sha256": "f8d931536323fd1a4f23055732e1de8f5894378a138ccefc249f06c8b3f18cb4",
+      "substitutions": []
+    },
+    {
+      "path": "live/patch/json.rs",
+      "sha256": "9214e03c8b26cafef5677b3105206c20d626fb75e243de6985b2897e9488ebf6",
+      "substitutions": []
+    },
+    {
+      "path": "live/patch/mod.rs",
+      "sha256": "34d867a197a9ca50fa79159bdf3b8120d9b46cd3a7947a78757c759262a8ec2e",
+      "substitutions": []
+    },
+    {
+      "path": "live/patch/toml.rs",
+      "sha256": "1abf777fe8a9169a318793da2ded9b37c9f96d55ac0ad12ebdbb6b50eee139b8",
+      "substitutions": []
+    },
+    {
+      "path": "live/project/claude.rs",
+      "sha256": "ce05b1c77c1a1806465c6364bd2b193d0a5e3973ab3b20970fb495a22629cc63",
+      "substitutions": []
+    },
+    {
+      "path": "live/project/codex.rs",
+      "sha256": "76b91f1b54cc19ee5d0adbb622eb3f163b5da54d408b3239ce71e3f5f75bd71d",
+      "substitutions": [
+        "SAF catalog pointer -> documented Codex guest path, never Android private path or installation UUID"
+      ]
+    },
+    {
+      "path": "live/project/gemini.rs",
+      "sha256": "e7ea2fb87345019c30c2e35229ce564cb200b7c83d12639e184a28cc348c780e",
+      "substitutions": []
+    },
+    {
+      "path": "live/project/grok.rs",
+      "sha256": "e06dfe3d0dcb78510278eab971455ce9c3be37ea509ef03a329f5048c19c1fa0",
+      "substitutions": []
+    },
+    {
+      "path": "live/project/mod.rs",
+      "sha256": "a7940ed34d520ee0a9050a09f33f458a4373269c0a8e8a5a50aa53c294cf708b",
+      "substitutions": []
+    },
+    {
+      "path": "mcode_config.rs",
+      "sha256": "7e0454d5748e7579ae2917c437be7f77f4430c134f1fd339c9b1d7a55f1fb31f",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/agy.rs",
+      "sha256": "ae0c17bb77c65d16d59a0f99f83722b2416295773e1149a53bb1cf2d2de2635b",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/claude.rs",
+      "sha256": "8ea66f2de66a6c8d018d76e090b1f25cf9fd6c511d8c52e541a9acda8e5f0455",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/codex.rs",
+      "sha256": "c672384c4008e9d088a4301d8ed670cb38c4f3158aea459c85859c2214dbbd38",
+      "substitutions": [
+        "Original Codex MCP writer uses SAF file transport"
+      ]
+    },
+    {
+      "path": "mcp/copilot.rs",
+      "sha256": "4231b395cba539a563191e0a114e27cb194127c5ac63eb964c06618edc2b302f",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/dsh.rs",
+      "sha256": "fa31ce99d2602afa80e6c30a9c8d58fabdaca665eb01905e22bd2eaf10f20489",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/gemini.rs",
+      "sha256": "22baee02a90aab40f9881bd5136a25ec061197e095eddea4e28a28df4443e8b0",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/grokbuild.rs",
+      "sha256": "c296cc94de738a8d5e37d3e1898fcb94f959a793a4a0d9cc5e4e03094f1005ff",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/hermes.rs",
+      "sha256": "3deb022725e5836aa4483d367901cf4858649473e94e1cae6a7f73da5676640e",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/json_file.rs",
+      "sha256": "a34ec84a2e03a99023887bdaeb9f4173e0d15c598259fdff0c5822bdbcf4d9fb",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/kimi.rs",
+      "sha256": "9de071dbcc4d44d72b638580c5db6b5c0f694461c302dbf5c8c73f1a4f745a47",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/mcode.rs",
+      "sha256": "0d60820851f5e8b37e9765f61eeeb257f00004ba0d51e099e1db5bc49e292e82",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/mod.rs",
+      "sha256": "5f2629008d609b7d04da59caac4ec5f0fd9de60ced40a60e5d2d6696b03fb6cf",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/omp.rs",
+      "sha256": "d11efdb793ef0d6ceb6cc6321bc8535c4640e9dbe4d77a440aba67e93f0ecc56",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/opencode.rs",
+      "sha256": "ab2fae4d76c0a4db12edcd727d85ee7b7efd2bb34b487e6c1e67ba304cb505f2",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/pi.rs",
+      "sha256": "63e9ee52925a0290fb819d2abc6ce1d4b13d8e542200407cc0be6e8456868f0d",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/validation.rs",
+      "sha256": "c77870a95b802139f9f3c4f7fb54c110a507986c5751a791e7bed3bbcc61eb79",
+      "substitutions": []
+    },
+    {
+      "path": "mcp/workbuddy.rs",
+      "sha256": "b3cfa9150052c6a1ec24d974ebbfd5023070e098f7dd4eb6552b252111ec666f",
+      "substitutions": []
+    },
+    {
+      "path": "mode/contract.rs",
+      "sha256": "fb77040da7641de9c5269b57895296fd40fa5f65be4654c8b2d1e4b27f36636b",
+      "substitutions": []
+    },
+    {
+      "path": "mode/controller.rs",
+      "sha256": "3f94425014fb0a7835dfb17b6789abd3bdb75bc8d05d352c8b05c28040026028",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport",
+        "Android exposes only Codex; other applications never attach during startup or exit"
+      ]
+    },
+    {
+      "path": "mode/current.rs",
+      "sha256": "f4114218583877a758115cafd98d38911b8bf7491afd41c265ba5fb9389eef3d",
+      "substitutions": []
+    },
+    {
+      "path": "mode/mod.rs",
+      "sha256": "64cef2e2553bf9ccbe096ee4db2eca72094b63248da4505a58a2da8f233411cf",
+      "substitutions": []
+    },
+    {
+      "path": "mode/operation.rs",
+      "sha256": "73a73aa4261d6d8db88f179306fa0732e53b896fa6a358ed9c9bb7ac9fcc22c6",
+      "substitutions": []
+    },
+    {
+      "path": "mode/stack.rs",
+      "sha256": "747672f3a281ba47bb2e2ead2d20687e9c0f9442f511b0bf637bba981a23af3f",
+      "substitutions": []
+    },
+    {
+      "path": "mode/state.rs",
+      "sha256": "02123733463fa3fbe4789ffe30b8b102c243dcf56589b385c3d511bb12700684",
+      "substitutions": []
+    },
+    {
+      "path": "mode/controller/mode_tests.rs",
+      "sha256": "02a217eaf10e7cce897ff21cce15e8b9429c62dbaf639862707eef41165ddfda",
+      "substitutions": []
+    },
+    {
+      "path": "mode/controller/tests.rs",
+      "sha256": "b706918754a547d145fe9a1f7b102ad9800fbf65755405969061d842b3930531",
+      "substitutions": []
+    },
+    {
+      "path": "model_capabilities.rs",
+      "sha256": "249e53608312891d5108ed74ebe9e40de09f9bf105b728cf30cfe7b9a5effbe5",
+      "substitutions": []
+    },
+    {
+      "path": "omp_config.rs",
+      "sha256": "f4b37f2353dbe910db51fd8b27687c8a4bcef182879ba97b362ed288bd5051ed",
+      "substitutions": []
+    },
+    {
+      "path": "openclaw_config.rs",
+      "sha256": "da21e13ed5f7a4af7a73600f152f690f67e0e15e899901700d1c19d0d6cae692",
+      "substitutions": []
+    },
+    {
+      "path": "opencode_config.rs",
+      "sha256": "e1285592c95068324237166e3710ad42cd402717e66a1307aadfa53fc70e4f4a",
+      "substitutions": []
+    },
+    {
+      "path": "pi_config/mod.rs",
+      "sha256": "0c3a84f9fc9aab55742242c265d47131fe02c16bfb87c26fbfe260255ad6e6cd",
+      "substitutions": []
+    },
+    {
+      "path": "prompt.rs",
+      "sha256": "f8b068b67def30594f1a4ed9fa4e553de531178980c548129187b4a63519d1e3",
+      "substitutions": []
+    },
+    {
+      "path": "prompt_files.rs",
+      "sha256": "da1430f478c5e10b963c4c8d3442ecd4b3698116df269a03a37cafa4a2558ebb",
+      "substitutions": []
+    },
+    {
+      "path": "provider.rs",
+      "sha256": "0e4fda6d9c5837e64016ebf2a50213016b16cc433c352f498c338c41e557c1df",
+      "substitutions": []
+    },
+    {
+      "path": "provider_kind.rs",
+      "sha256": "252b49176896b55b8e7c3ed0d7275253d6803c1f8e1b35ee206a36674c65f67f",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/body_filter.rs",
+      "sha256": "7d8b0cc84efb9530e82d75fea0874b8dcbfdd3e272dd000891177aee11ad39ab",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/browser_guard.rs",
+      "sha256": "abf884917a7f2ba6fef3203f1955bf8ad2f80308f337aae7057bac76547d5871",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/cache_injector.rs",
+      "sha256": "27b50945ead1840ba8ff941bfb9f9be2dd77d1f18aaeb9de36de99fb2c3388e8",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/circuit_breaker.rs",
+      "sha256": "8e0efe8d671f5d813ff6c99dd4629ef51d98bd4134d5f5bef9fadf751e2a443d",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/classifier_guard.rs",
+      "sha256": "dbcb56f7719de30648ab0a2a6539ef0b09dead98a86c5e51d4c7b43389f6f0c6",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/codex_models_passthrough.rs",
+      "sha256": "ea1fba35323020503f926bfe474324574afa32e72cf74d6652a146399a66819f",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/codex_quota_protection.rs",
+      "sha256": "c41fa1085c1d6f54250fecc082ebb1cb318d01af5676ed05ace9fd87588d2c8b",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/content_encoding.rs",
+      "sha256": "b9425e4cdc22b3f68c8b20478fbddec6341995da780599352623e7e4e3d6189c",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/copilot_optimizer.rs",
+      "sha256": "c0a8c55d9c9bf6c2c0fcf62884c92de1cce6a312e64c6ae1ef9c575eba7cd652",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/error.rs",
+      "sha256": "9da22cbf92a6b7eee95a5b7d99427d76af16e79d311062cf3344eb1c1c7d4aed",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/error_mapper.rs",
+      "sha256": "049f2553975b7bf8bb881f6c89e4b84a017b4f1b2d80f0e1221dc64602f88f52",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/failover_switch.rs",
+      "sha256": "b814ed12b9166ac97872f14ab8df47490f2a5da52362a97b654836f367458ddb",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "proxy/forwarder.rs",
+      "sha256": "1744e846faef4ba87993e3084359b37b25e1077c0c6d16582cb268294f30f51e",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport",
+        "User-requested opt-in reasoning/item-ID filter before upstream request preparation"
+      ]
+    },
+    {
+      "path": "proxy/gemini_url.rs",
+      "sha256": "7ecd5e53f7b009c3efca9e6f367615206804db688c5b20542489c4df577d9396",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/handlers.rs",
+      "sha256": "d6e7480b149d8f6ccde04361b1087610b7c6c98507413242205a0164eb930a00",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/handler_config.rs",
+      "sha256": "5d3fa367381100f24ab0e18a04911b80d68249206705a638c60d9a2b71299d75",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/handler_context.rs",
+      "sha256": "f7ecf5d29e64e988842a1e023f926c362104e85f1350fcf62b59ff66d4a377e5",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/http_client.rs",
+      "sha256": "103be177f335da69781bcf2d4995b2b1c3342c46fa89d7284108e67ea6af84f6",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/hyper_client.rs",
+      "sha256": "0283344e415b2c2899b449718d2e5029604d5adc2c9673b27330222bad6980b6",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/json_canonical.rs",
+      "sha256": "c02077c1c330af29d41ee9b63e7d90424894f92d839e2d06a8bbdbb534b4b68b",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/log_codes.rs",
+      "sha256": "b22285ec977921e80287e9349b9848cf24a0710644cd630fa7b36ad4d39c226d",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/loopback_probe.rs",
+      "sha256": "0fd253a231c90603ec1901c900eb5e0661339f6719b2a8196a197c832a10b366",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/media_sanitizer.rs",
+      "sha256": "64003d243ada4ab410f0bcb5c5132b6715ce8da5db8bc6ef5a310f1daf2d3524",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/mod.rs",
+      "sha256": "6d17ccb8aea97ac9aa10e1ad3527262ebcce81a86860b5a8f0a0bfaad11e88b2",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/model_mapper.rs",
+      "sha256": "dad1eb690d8bcf798680ac587857608e163bf2c6d88067402a0d3b8b8ee2a8dd",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/opaque_state_rectifier.rs",
+      "sha256": "2a4c1718476ac71778fb3517a6a1a7704478dca8aaa14822a221ec74e13cf122",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/provider_router.rs",
+      "sha256": "8eae5e65d7ec0c318d26de82bb7c2e8231e9547288acde431bbe9a380fbfd7bd",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/response_processor.rs",
+      "sha256": "232c9054b9862f43ae26e31d3126fba76bd5539b88dbb106111936cb2a85753c",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/server.rs",
+      "sha256": "d45adbc58f65f45a58880f4b865c0ac7f8bc2ba57dfd4b823d0872687f066666",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "proxy/session.rs",
+      "sha256": "a06950283f1abb77b6f98f5de73aaefed37e08858bbf0d5562cff7951a6c48c2",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/sse.rs",
+      "sha256": "eb59358bb2575238da25f41d5f3357df6cab5d6f363aa581ed5d19a53adfe3ff",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/switch_lock.rs",
+      "sha256": "8cbd0de8b3c86ce270f88b4f4560faf1081ed0b763fe6f2195e313f634a3a25b",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/tests_issue_7271.rs",
+      "sha256": "d02e4e2bfe11939a35cf7a8b011093a22127e3fb82766d6e0ef0de84ce6008a7",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/thinking_budget_rectifier.rs",
+      "sha256": "f165fa9084477d3dc83519cf77eb2b3d1f16f69bde89994794f9433714861927",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/thinking_optimizer.rs",
+      "sha256": "87c14f78af0f9129051ffd05dac07cc4b7057eb5176aa32d51b5c90250d11b5f",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/thinking_rectifier.rs",
+      "sha256": "ad696e827a7cf5c983334cfd3b8ee53b0be356dd34a1a97c9a5858ad560548fa",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/tool_media.rs",
+      "sha256": "c9c66b2ab9b21502589d286706cef0f54ab46c09f6bf76d744394008975c2556",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/types.rs",
+      "sha256": "0532a75974fd51bae252d2367d6408c38f3969bb1b8c39ee4ece16a7702d8330",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/upstream_guard.rs",
+      "sha256": "ccb957630924b9ccb0f30ffc8f268e505a7227c24b0ba4f31a26ac9d78af858f",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/copilot.rs",
+      "sha256": "73e6eb26f83676e38257128560ce53ddc6cdac179d3d6b65b50953f6946bf189",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/diagnostics.rs",
+      "sha256": "a8bf4439dd5d0b2edc4e1cf24d2740e9f3ab359a6fb59c32dde32477428ad67c",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/endpoint.rs",
+      "sha256": "c31b900f72881a717cbd37fd4bc993b81204f7cd283097171a891545409bc454",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/headers.rs",
+      "sha256": "fd117feb117701bca0c6fda79c977a18ab1eae5d0aae1df0e8e668870a1b3bb2",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/managed_auth.rs",
+      "sha256": "fac49a4b48f5199dba5fe4f0650d1ab7f085f1ae0e435ed90cd081f9677cc85f",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/opencode.rs",
+      "sha256": "0f20df31deccbd37bcd85d517f4718a5ea042be5929af6e16adab943783b1b41",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/request_body.rs",
+      "sha256": "df895942a3dd9312b666b3b7ced43cfd667dcbaf5c7c479c7a3b27a020674ca5",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/response_check.rs",
+      "sha256": "e848d2854e299ff8e632487956b024ed9928111a2a790786282f9e44b322f4db",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/send.rs",
+      "sha256": "afd794661c6c8bb2cf06462c3c478ca3b7a5fcff5bf6d835b187776ae9c4e73d",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/forwarder/tests.rs",
+      "sha256": "efa6d00cd7fce774d22a09d32582fe1a01f53ca4cd0b7931a0f400572a931f42",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/privacy_filter/gitleaks.toml",
+      "sha256": "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/privacy_filter/mod.rs",
+      "sha256": "8ea1d48d640fad2ac6fbe15f72070a79c1bad2b5e34294634a26b5e68cafcda1",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/privacy_filter/pii.rs",
+      "sha256": "00ae079f4e316a2d94bc4bac456f39fd068960ec25e9934ca89dbec18b506fa2",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/privacy_filter/secrets.rs",
+      "sha256": "6f7973f1bdde05fbe324c758ddc0d76ff9f31d1bcd6defb497ede30efbfcba3b",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/privacy_filter/tests.rs",
+      "sha256": "0a827eeae992429d4a560c8c0664edf9acdd0be9b923adae68acef4fcba5cb72",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/adapter.rs",
+      "sha256": "8055f3d24193b783d4691fef459372a5f485b61712a5ce8e64b83f4704a6ea55",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/auth.rs",
+      "sha256": "b20d7765236c6a45dce7c2135d7aaff845e5b987828fde868234254899e675b4",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/claude.rs",
+      "sha256": "0d01db8f9657bd9cf6ce017e2092b7b480cc058e1f0b7d65751037c943eed611",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/claude_reasoning.rs",
+      "sha256": "01fabb506aef7672b5852561c58ac093f629294bc07e45567669a156831282fa",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex.rs",
+      "sha256": "d9064888b7963ca36ea74c1a9d176174a6b40cfc61bc35b73e7b01fdf667a2f8",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex_chat_common.rs",
+      "sha256": "804fa411eca8eacd1da750a1ccfc9da7a47f9f7cffd181042c7f28dfb346b7ff",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex_chat_history.rs",
+      "sha256": "3d3a21adfb286c7988aa9f8f76b88d9f508633c89df66d0026e9052081777dae",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex_chat_tool_history.rs",
+      "sha256": "31ea22a5ecb5a450a307609884f63dcaac322c0b48b2275bcc52f9797b38f31c",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex_compaction.rs",
+      "sha256": "78c306c171821c089a8a46c42ca64f831cdd8b7ac2b345491882c26f1231c543",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex_oauth_auth.rs",
+      "sha256": "3ebe2a5e7c9485453432cab00e5727013bd60f19405b8e5d18b28b97c09e4905",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex_responses_arguments.rs",
+      "sha256": "a1f117571180471fe0303c1f8bab32050067b8b720057d52003e7af7eee1beee",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex_responses_sse.rs",
+      "sha256": "086c2f6312bcc2ce002f8db44cad16dcb1c0b69ca4d9aeb9cc068071203999d2",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/copilot_auth.rs",
+      "sha256": "274f962bc9f5006c91e4eec001e6df1dc8fe64ea733e1ed8eb5e5bb4658d9336",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/copilot_model_map.rs",
+      "sha256": "65d0f13af18f1e7bd2b525f4c468d06815b2370a549f6f7d42b3003f600b5e8d",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/copilot_responses.rs",
+      "sha256": "6a0fb65b3c275944468666727e40ed2fce4191c17492549314188ba537cabf24",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/gemini.rs",
+      "sha256": "90cceaae52094080da09b380130d1d80651430be77daa23a70c5f72f3ee076a3",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/gemini_schema.rs",
+      "sha256": "41f1919b5019381df90fe7d008ef9e3c38be4b45bb20a14cda053a5b47d1cacf",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/gemini_shadow.rs",
+      "sha256": "832946389a4867990427c97a5082ac20f512cd04c7e4f7305c13794ce9692b77",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/inline_think.rs",
+      "sha256": "48e1905a767cca7228dee0b160c016b37a2d2a99b26cbe9219ac63833699af0f",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/mod.rs",
+      "sha256": "326adf6bc341af112d90bf4b0c31f656522da21dfd35f90eb5bd842bdf6b197e",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/reasoning_bridge.rs",
+      "sha256": "a8fb6ac31261daf52012282c5c1b8aa822c190dd79f1dbd4cc24e0f92c5e13a6",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/responses_late_arguments.rs",
+      "sha256": "5c59833716b1d9c6fa6b20dc18ef8eba9dfdf37bbaaf07e73360d5d769eab693",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/streaming.rs",
+      "sha256": "cb5fdd9b76d911b6e8ae97b425f7c7cec6d0f5fd01651de57cc55b9dc5d109a2",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/streaming_codex_anthropic.rs",
+      "sha256": "be1e72b87a4019a0fb9157602201734cec4383a2dfc3c2b10af062d8b0aac722",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/streaming_codex_chat.rs",
+      "sha256": "dbbe44538aeab4c8ecb98db78259371a7e28ef6983a9bb9dcd633cbb0c4ac68f",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/streaming_gemini.rs",
+      "sha256": "ce23f328f689f25997bb04443dc97b7b5e987c0c6c7521db1c1acb80cd0ef94b",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/streaming_responses.rs",
+      "sha256": "af236d2e9d5f0029b7238df227c2c2e8ec8bf9067bc5c9097521e67569d42cd4",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform.rs",
+      "sha256": "9e0a6bb684e8eda922ffd7b74375cd5ce6c6b08239039b0f27b63ff5d73ce0c2",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_codex_anthropic.rs",
+      "sha256": "8cd08a5b16816fc1de5283f18dba2d0c30873f2a86454566d09ffa162a3a7dd7",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_codex_chat.rs",
+      "sha256": "9d3b79e27e668f5139c41fbb0b856a7d5e0137dbb01b7e91273afd22e437fcf5",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_codex_chat_moonshot_schema.rs",
+      "sha256": "b4496d32a70ca312a5b47588064686d98b02d6b480fd34126ceb8a651a6ad5b2",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_codex_responses_kimi_history.rs",
+      "sha256": "b0d5e1ed73476a89f472044ebe7f664fcac1ba41ac7413714b0fc995c95ea633",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_codex_responses_namespace.rs",
+      "sha256": "d2f4bea42b89132c0766914ad9befadebdc206a447bf49949f99a2ff00d3a792",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_codex_responses_reorder.rs",
+      "sha256": "563f546d497e14fb65292592593a1a31946d2d6afbf29d23745adc9604db4533",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_codex_responses_xai_sanitize.rs",
+      "sha256": "ec46824b46a871e5124414de427f2e74a694413b6b0d16a2ba38f80debe987ef",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_gemini.rs",
+      "sha256": "9afdd02145183e05d03570f6d0be9b395be9e20a1bd4931854ac919473a096df",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_responses.rs",
+      "sha256": "9696980373ae8702eb741ce673797316455c33d4ce54ab28f407b7f24b7722fa",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/xai_oauth_auth.rs",
+      "sha256": "942819f5e693216e98d24c00c08560c1ba42937be319d0d838a7392997dcc83d",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/session/header_tests.rs",
+      "sha256": "c60a65cb767597b8042f80aaefa7a083d0b9fc6576544aecbbd09b4e0b79e8de",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/usage/calculator.rs",
+      "sha256": "494c62f01097338368cf8b421045e554ef208144c0c67ff9b04558fb1208f2ca",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/usage/logger.rs",
+      "sha256": "adeb365980f2f5ba2a19e8861853ff9d70fad4c278463e3ee7c712ad553f1332",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/usage/mod.rs",
+      "sha256": "69026faa8885bd56be42863347dd2ce2c813b7a9477bc65216b9f110fb094ed5",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/usage/parser.rs",
+      "sha256": "b973bfad9cbd030f4e18531cf7206ba3f50a9da1dbcf4a7975f9b7703666100d",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/claude/tests.rs",
+      "sha256": "4f1bc27c703ba61a9c50b17c7edcbf7b0c495e510024566e239c7ce90b9943ec",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex/tests.rs",
+      "sha256": "e8ccd4837aa2168dc5fe0c8a39a5158264d5ee8932df2c78ee9ff29941ef23f2",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/codex_oauth_auth/browser.rs",
+      "sha256": "1d4619f67b33e10b8cd27f67337764973de17c9e10e7df7c392da78c920b4ed8",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/streaming_responses/tests.rs",
+      "sha256": "c4562574c6b6aa6ac2303643f7146ab88096fcf5590a7f824fbfd67a411e931f",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_codex_chat/tests.rs",
+      "sha256": "f049d0bb05909e105fbdadaadb8f323d1e925c670a42799c7a39994a2b8714c5",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_gemini/tests.rs",
+      "sha256": "ba8ee611d0b33f0c5f989ea22d5d9adff21e67f7f08d461eed72522ddee69943",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/providers/transform_responses/tests.rs",
+      "sha256": "5398b32b155f319d725e71cad7beb4e06a54f59566587397733e1956f8bc6be5",
+      "substitutions": []
+    },
+    {
+      "path": "proxy/privacy_filter/testdata/cases.json",
+      "sha256": "7cc27f8881cded52ee7bcfdce63b1b782c9defa671661caf25524a8fdfbd7d86",
+      "substitutions": []
+    },
+    {
+      "path": "services/auto_sync.rs",
+      "sha256": "5df524edc9747885acba64565e6ccfc04777757122f7ac27dad308d8298c7bb7",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/backup_storage.rs",
+      "sha256": "66035782fcf4528b9520ef76a67ef870ecfb2b41fe0fea80ba9fc8032fbaa0aa",
+      "substitutions": []
+    },
+    {
+      "path": "services/balance.rs",
+      "sha256": "ccdfcdd0e52f8cbf6e2ffe93ced421c88a24f7fd283d1914a26fdc7d37344025",
+      "substitutions": []
+    },
+    {
+      "path": "services/codex_oauth_models.rs",
+      "sha256": "10aab9c8772e196c93ffffcbe06beb2fdd016e0cb5676bb6c9456a50f14b7a87",
+      "substitutions": []
+    },
+    {
+      "path": "services/codex_session_compression.rs",
+      "sha256": "390e0c64a009c004d84ef2f09b60971ea1374bf1bf9fba32e2ee1afd1766983f",
+      "substitutions": []
+    },
+    {
+      "path": "services/coding_plan.rs",
+      "sha256": "530226c97a93ce08ee7c09fc77bd4ff77258fd91c7f92c7606dee91226a2249c",
+      "substitutions": []
+    },
+    {
+      "path": "services/config.rs",
+      "sha256": "203f1c79eb4d46f962eb4ca92febaa318c0e5d11a64fc767de532414c808b7c0",
+      "substitutions": []
+    },
+    {
+      "path": "services/dsh_account.rs",
+      "sha256": "d099f54604ff5c66af66ea2a4bb07322e4611d9efd92d9d71b294c6f290e1490",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/env_checker.rs",
+      "sha256": "8845c369960fff9a87ba7ee5a977f79a29939b971fe532e10f8a64022a644319",
+      "substitutions": []
+    },
+    {
+      "path": "services/env_manager.rs",
+      "sha256": "7dd9619325359f1622e31078ef83cfb8f88f0c2db29a7ba9ebe705cd4c969714",
+      "substitutions": []
+    },
+    {
+      "path": "services/exchange_rates.rs",
+      "sha256": "ad70b9c863b43516aae44554d4a33bb608dc9e4c2015f9a0fdacd70623dcecaf",
+      "substitutions": []
+    },
+    {
+      "path": "services/ip_diagnostics.rs",
+      "sha256": "9b4606288e702cff3eeed4f7e7368ea6c7087bd52b7eff274f92020f6132cc9d",
+      "substitutions": []
+    },
+    {
+      "path": "services/mcp.rs",
+      "sha256": "1a0473463aed5dfaa81040e74fa991871929c418169a8e25fe938a67aa1db3f8",
+      "substitutions": []
+    },
+    {
+      "path": "services/mcp_connectivity.rs",
+      "sha256": "f829e156faf8c6c1193cf6a6e42e59d808cb0c1e7f6465b574aabcec6b1b7bb5",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/mod.rs",
+      "sha256": "7edbc50a8a655588bf87f06754a9d6680b7a7f2144d44f380bd700b3ce53a040",
+      "substitutions": [
+        "Desktop automatic cloud synchronization startup omitted"
+      ]
+    },
+    {
+      "path": "services/model_fetch.rs",
+      "sha256": "5ab15eca44f8f0877aebe4fc89cb1dac3c5a4f4ac394422083429c7a2ac6a04d",
+      "substitutions": []
+    },
+    {
+      "path": "services/model_pricing.rs",
+      "sha256": "a9962514f4eb19c41903cf2db54855f7e7e545281317f237f67d05af1d28780f",
+      "substitutions": []
+    },
+    {
+      "path": "services/omo.rs",
+      "sha256": "83943bd5aa3767ef19425c054ab3956b65bb03ae9cac1d5e6ffebfe25e2edddf",
+      "substitutions": []
+    },
+    {
+      "path": "services/pi_prompt_files.rs",
+      "sha256": "073edf7d3f66e029105747ab7a24c818c6718cfbd22f2210140e5e074f12fa22",
+      "substitutions": []
+    },
+    {
+      "path": "services/pi_state.rs",
+      "sha256": "6c447a12b2358aae4377324bcff4c7ad34a3c49afaeae26e58ef3eb51371c5b2",
+      "substitutions": []
+    },
+    {
+      "path": "services/profile.rs",
+      "sha256": "b6b57f4c7acc58971cec53e5d6e336a9a0d11fc842248b8904e1ac74964d5efe",
+      "substitutions": []
+    },
+    {
+      "path": "services/prompt.rs",
+      "sha256": "49edff1de025d508cd7f9d530e83ef0647f0e74261d9b665f653279fe578efa2",
+      "substitutions": [
+        "Original prompt backfill/enable/save reads and writes use SAF transport"
+      ]
+    },
+    {
+      "path": "services/proxy.rs",
+      "sha256": "fde05ddd51488faf7c2c46247ae0ffe4f31273381479f5af7d93ad37040ba480",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/s3.rs",
+      "sha256": "3c0c3f0758d83cfc243b59422a614021513b25df1159bdb885f52492b5cd3d74",
+      "substitutions": []
+    },
+    {
+      "path": "services/s3_auto_sync.rs",
+      "sha256": "712363eea5d4a1850e3dc1d9760ecd262ac34740d9b596b1b4b9d80a2d54d3c1",
+      "substitutions": []
+    },
+    {
+      "path": "services/s3_sync.rs",
+      "sha256": "e750868f1413e984e6672935bae1ce9a9f6332945b9bf113c91574dd517c3a69",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage.rs",
+      "sha256": "3394f94d78d4729982d62150717efe7459131e1c2066c99a65a5d521c5f85250",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_agy.rs",
+      "sha256": "6847b9902f9befeb49b24962a12a9fe0f141251afd16b8ebb696e2e2f868f743",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_codex.rs",
+      "sha256": "378d9c771ae9f4ed3062b9c97d9dcbd84c65b923a7ff36c1296c985ed5587661",
+      "substitutions": [
+        "Original session parser reads a SAF-populated private cache; no URI is a native path"
+      ]
+    },
+    {
+      "path": "services/session_usage_copilot.rs",
+      "sha256": "5931e4296e2d55882f9d3296c35017e57ced722bc5c3df368062ff120109b6b0",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_dsh.rs",
+      "sha256": "e99d7ff4357de01abb86b7f53a47ffabadf1ebf343a84d2993f7793517c96733",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_gemini.rs",
+      "sha256": "43542e29ce0b23763a0ebae6d8172a75c4bff0872f1da637929bad45bb11954b",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_grokbuild.rs",
+      "sha256": "e67c7d2674221d5be5b21bb3f5cd9aa4004d1876f0b290d5d9b0f60706625c12",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_kimi.rs",
+      "sha256": "016512f7782137f5c290d06267434f783b7aa1dee3ddb84d73b74eb2dc423b10",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_mcode.rs",
+      "sha256": "c1e2807a2a01e059c496ac1ab59b2f7967c2d907d4126de5a83c9b5b787252c0",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_omp.rs",
+      "sha256": "c9156dcf5f7c3b54f800a015aa68fbaf10345c0e43b47083e56131693810a5f3",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_opencode.rs",
+      "sha256": "3fdaafebe351b41c5f53a1961f514283d49725e757744293f4eb519d5f0d8917",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_pi.rs",
+      "sha256": "a3173f7ed8aa978b73d2e09556d19f0f51fdb0fa02a3376d970b41ae3b4bfff2",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_workbuddy.rs",
+      "sha256": "4008d533b7de1564696b3914bf9bff44644698f553a0aee097ad35b035375459",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill.rs",
+      "sha256": "e8ea0c44c5ead58ef79873be66dff26354fbc700cfad127e841f424cd5267d7a",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill_repo_tokens.rs",
+      "sha256": "18ee65f742fbdd7c363cc956ade8ecfb6ca8d8616c31ee48c7409b5937f11b51",
+      "substitutions": []
+    },
+    {
+      "path": "services/speedtest.rs",
+      "sha256": "f6a70df3bdb6a1e5ed5c2f925d2bdb5799c88f87ec5600b7a6f643e73b7699f9",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/sql_helpers.rs",
+      "sha256": "3f6b9eb91bbfd128f719b5db910d83f07af8cb2de52331a376e05bfe2d21ce79",
+      "substitutions": []
+    },
+    {
+      "path": "services/stream_check.rs",
+      "sha256": "3a5566564932e93c42bc6e2b5c6b958e152c1d6fdfa0fabd15516e0ca6585803",
+      "substitutions": []
+    },
+    {
+      "path": "services/subscription.rs",
+      "sha256": "c33222dc6895870b3180ffa3f8221b711e0c92c88c8f4f177fc6275789949565",
+      "substitutions": [
+        "Codex quota credential file read -> SAF; host keyring remains inaccessible",
+        "Non-Codex Gemini OAuth literals -> optional local build environment; absent credentials disable its unused refresh"
+      ]
+    },
+    {
+      "path": "services/subscription_agy.rs",
+      "sha256": "a60fe18422f992c9c232ca2dcf995025a5d52636c21b255198be54a21acb3a51",
+      "substitutions": []
+    },
+    {
+      "path": "services/subscription_grok.rs",
+      "sha256": "8b3a51bb9081ffb5b28730d50923e244cd1329062d1f2a6c6a65e6d138dfb781",
+      "substitutions": []
+    },
+    {
+      "path": "services/sync_protocol.rs",
+      "sha256": "047dc32c3bb8c3c1db2840281abe112c8255adab510e332b70f9a3656bf1a662",
+      "substitutions": []
+    },
+    {
+      "path": "services/usage_cache.rs",
+      "sha256": "ca5ec2247e3b47aaa90c47066f313beb8eb4adebb1efa77b088a338b30fd13cf",
+      "substitutions": []
+    },
+    {
+      "path": "services/usage_http.rs",
+      "sha256": "910bab51c20a0bf74877122a0984c75705420e07e2b71eee34f5b32c7191b607",
+      "substitutions": []
+    },
+    {
+      "path": "services/usage_stats.rs",
+      "sha256": "9397c6dd4d563dc031e7abf36352da5124011a3df2d07ba92e5f49dcc510b157",
+      "substitutions": []
+    },
+    {
+      "path": "services/webdav.rs",
+      "sha256": "3c56f7639c9c2c9adbe4221a4bac78f95e1d1b0b508fcda7ff651f4639d25e52",
+      "substitutions": []
+    },
+    {
+      "path": "services/webdav_auto_sync.rs",
+      "sha256": "ce57d937237d9d2cbcb8132664b41e48adf50bfec7cefe56db1f12c7cb29b1ef",
+      "substitutions": []
+    },
+    {
+      "path": "services/webdav_sync.rs",
+      "sha256": "2c98dbdc53839b36a5dca9c66bd106652c28e8a08dcabf6591df94d9af720e8b",
+      "substitutions": []
+    },
+    {
+      "path": "services/agy_account/keychain.rs",
+      "sha256": "f9008f8d75486f328b83d4eae7dca04e46e960d41949b4f0b5037d8febd7d334",
+      "substitutions": []
+    },
+    {
+      "path": "services/agy_account/mod.rs",
+      "sha256": "d2e5aeb2102aff4fe94d77375da8e35a8fd224c1d02bf20fa4236bceb80718aa",
+      "substitutions": []
+    },
+    {
+      "path": "services/agy_account/oauth.rs",
+      "sha256": "a2cd0a481db52cd71c242ddc07bb5ee57fc915418d1e243632e9c7ae7e34519a",
+      "substitutions": [
+        "Non-Codex agy OAuth literals -> optional local build environment; absent credentials disable its unused token exchange/refresh"
+      ]
+    },
+    {
+      "path": "services/agy_account/quota.rs",
+      "sha256": "a46d3ba1a819bcdebbacfbeb6da2f452856df44915d1019cc47f3f9722cab9f1",
+      "substitutions": []
+    },
+    {
+      "path": "services/agy_account/tests.rs",
+      "sha256": "6446206157f6c57de98fc3404541045fdebd5c1d5307d24c3e7d19fa4aad0529",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/cc_lock.rs",
+      "sha256": "fe25f4bdeb8c1536aed088a9e05a179cec87d93bf6d876bf13d5ade2fee64ad5",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/identity.rs",
+      "sha256": "406245f8e41dde920261e75d88d8562c6b662b14accd1535e31b2a586c60f61b",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/layout.rs",
+      "sha256": "94c0cd6ff34b4c6ac706ecc28faab3a7392dd02ea130259a07ff26448c7d19e4",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/login.rs",
+      "sha256": "b62ec075c60389c6522d8546aa98475fab37db728d79f5fe19e4c28f17ccfe33",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/mod.rs",
+      "sha256": "adc6d37e074a14672a774a0ec00cb8d201ba0bea2ff5930ac881849607ff585c",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/shared.rs",
+      "sha256": "fad23b8ebf07c759c02a141805ef433d79295dfc3338ea506e1e676a800001b7",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/tests.rs",
+      "sha256": "5cac370592e448d95165623e94545883de4f805658514b24fa30adba48f61c50",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/usage.rs",
+      "sha256": "cb18ff8be4c5d51dbb51db9dfeabad42c323ff703fb543fa38f3920a5593934e",
+      "substitutions": []
+    },
+    {
+      "path": "services/kimi_oauth/account.rs",
+      "sha256": "455a87a896ca53c368486e73907e0bcb0064ff9858a6baeae58d192d1fc47388",
+      "substitutions": []
+    },
+    {
+      "path": "services/kimi_oauth/lock.rs",
+      "sha256": "2cb813646ab4cc9b6aa57328e4fc0c45f0a1356b3d9781e42c1da6fd9d4e8bbf",
+      "substitutions": []
+    },
+    {
+      "path": "services/kimi_oauth/mod.rs",
+      "sha256": "28327bd8d236c2dee4e6f32874617abd5ccf196be63d61d469d92e4bb2258e36",
+      "substitutions": []
+    },
+    {
+      "path": "services/mcp_connectivity/tests.rs",
+      "sha256": "d423b1d932d39be46a527cbc091dc1378fbf701bf0bd9ac5e6e3aed18715bcb5",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/agy.rs",
+      "sha256": "999aa14c7d63d92a0ee32c08db97249287093ad69d75b10c4313a88c072f64ec",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/plugin_manager/cli_fixtures.rs",
+      "sha256": "4d02f93fd1fb96564e217b204db2e3a8a2666771e35303b4bebf9ca692c69e61",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/grok.rs",
+      "sha256": "2f784768eaddefd791809ba52dfae8a01ea18ed285335b98ad71b471331aa9b1",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/mcode.rs",
+      "sha256": "1fac1c0f48fbce6662a7adf4ce09b49c6d838da8c231bec2639793756312cdd1",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/mod.rs",
+      "sha256": "3401d9dbd2ed25f89d3902a9b77805f00fe81ee3cc604babc1c105d80292285d",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/openclaw.rs",
+      "sha256": "3026ade7bba2ef65e5102cc9de6b971c6b12405929a9c527158cf91d3ca8c149",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/pi.rs",
+      "sha256": "28991c532f187eba983a763fb8d5cc9c3e2cef183e9a716c8e05c32ad0b5186d",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/provider/agy_direct.rs",
+      "sha256": "c82d5b0b37982d3fdf8115f3e087bf6875e462f1c627df706b78d2890f1c8018",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/claude_direct.rs",
+      "sha256": "60b83431c1e06778bdaca1fa8073bbd42a5f50a415fe4415b5fcd38c584076ec",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/claude_editor.rs",
+      "sha256": "3e53d5921601045865f18fb0a1e4c8b191b79cbc49d9426cafb6a4d9ed88452b",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/claude_official.rs",
+      "sha256": "d306b024095be93aa5ae2fcb914884d5c5df812ce08ca4c4daf0e52f30c1e5ba",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/codex_client_catalog.rs",
+      "sha256": "2f28e38516217f507feabee2b048ea15a6b416f282b488b6b5f1394ce98b661e",
+      "substitutions": [
+        "Android process visibility -> unknown; requires user restart, no false runtime confirmation",
+        "Codex file reads and existence checks -> SAF-aware platform I/O"
+      ]
+    },
+    {
+      "path": "services/provider/codex_direct.rs",
+      "sha256": "d00378d5c4e8457a929bb763095517a04393e04b8fe1fdf8eb3e1ebc637b546f",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/provider/codex_editor.rs",
+      "sha256": "bee591ceafa047db3eb794f0be55910c353f37774e037074f6e28e1ae0c0d727",
+      "substitutions": [
+        "Expose read-only native file relationship check through existing writer projection"
+      ]
+    },
+    {
+      "path": "services/provider/codex_login.rs",
+      "sha256": "b2d2e016bdc4a3200aa045893af6afab3aa0b1ae418568a059a18e3faa26fe0b",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/codex_official_models.rs",
+      "sha256": "703b07a36adbaaac29c3a38a7c9954a0ff4ef7fd9ea2fa5f6d6fb29bdae5284b",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport",
+        "Codex file reads and existence checks -> SAF-aware platform I/O"
+      ]
+    },
+    {
+      "path": "services/provider/codex_terminal.rs",
+      "sha256": "7611dbbdea76a2ff36d8d89aa091d006573c40b8e96a3ca62ba4f16d7974945c",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/copilot_direct.rs",
+      "sha256": "3cacf015331b14623aff1886465149e1488242a6c79e6b8269e23551b685c01a",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/editor_toml.rs",
+      "sha256": "45fb424fca0448c07439d25b64985b9eab8970556815b7dd49c6fd59c67abcb3",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/endpoints.rs",
+      "sha256": "1daeb44560928c7697197753a959300f5a5bcb2027d9e2addb724d9b22f99905",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/gemini_auth.rs",
+      "sha256": "1d1eff9b913aae5af9738b39c33b0356568d132ecd1bfaf288821bc28672b5dc",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/gemini_direct.rs",
+      "sha256": "4e85f0b80f4099f3cb7f6c7fe0ce49110b1961c5ae0c9ac72703f9f305566e47",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/gemini_editor.rs",
+      "sha256": "c5fb6007581208b7aaeae657b7a60dea956dd6eb6959d8620dad75f9b50259fe",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/grok_direct.rs",
+      "sha256": "49bd33d0a7de1fd5a180b2a8acc61b586e2998090bbb46278abe956ed4a684fc",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/provider/grok_editor.rs",
+      "sha256": "a68c861ece12582cb456f3eea428e74301f6316cdb6068fb73c7f53abf1da72a",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/icon.rs",
+      "sha256": "ecacb51ab8f4c8768ac532d3351fb72cf970e82bc5ae9cfd57d10f6bf3e3452c",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/live.rs",
+      "sha256": "c8e2f0cd9eb4939613612fc364d5bf6b0fd9406c8971bf6068d2b72ee6a6262c",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "services/provider/mod.rs",
+      "sha256": "777edc69cdce8f7eefd9314d974781498584e4ff7e4186f377f2c74d2891f27f",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport",
+        "Expose upstream TOML edits to Android raw-editor command"
+      ]
+    },
+    {
+      "path": "services/provider/omp.rs",
+      "sha256": "52dbbe36e3b66eb1b48e16d744a1c8ca88efd49013a3693696dfdc2c4aa6f1c6",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/opencode_tests.rs",
+      "sha256": "83a14d5133ff3209d9f7194ca475f84ad6fb530cffdc3fed96e8cd9e6b68dfb9",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/pi.rs",
+      "sha256": "25ab4f158f40b0bd2e9dd48b48541a93fd52ee4613c590aac19fd713f203c668",
+      "substitutions": []
+    },
+    {
+      "path": "services/provider/usage.rs",
+      "sha256": "d79d560928ea6e1aaebeec28768bb42e3657bdc7377176168a324a08d20a17df",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_agy/native_models.rs",
+      "sha256": "7b6bb30f3c5b335fdc99c419b8bd18c9dffa55838c9b518dfce2bfd4a57dbbfd",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_agy/orchestrator_tests.rs",
+      "sha256": "035ebdd36cd898a626490e5d079ba91b7e068c791fb2da5bc3d56c9258d0bd7b",
+      "substitutions": []
+    },
+    {
+      "path": "services/session_usage_codex/tests.rs",
+      "sha256": "154f0eef8ec9c619aaede1c5d8ae681db46ce09f098971bfc22e7a5be8732e50",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill/backup.rs",
+      "sha256": "da8e6bd9fc93741f3aba4dcbd2ad86429690ae498c6a34b2dc875e74dcf02ec5",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill/discovery.rs",
+      "sha256": "513c85495ec42309e0ec52fc4b90ba9e2b00f13c757229229cd2bbff5f8c4885",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill/download.rs",
+      "sha256": "65493abd6839e0cbab0dfdc83b27f30262330356aa55818ccf9d801ce2f8b4c5",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill/repo.rs",
+      "sha256": "93eb5a1a410261cd3cfd10de12457a406b1f2d99be637457670f79d0cf912f1a",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill/skills_sh.rs",
+      "sha256": "fdc5a6ce3e1c1c5c8e2a3e522adb7b4b8d00fffb80aab637414414d1aa08b7ac",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill/sync.rs",
+      "sha256": "aa0bc4e09fede28c6f3c844167956f76f6f533e5f302bb3ecbb96516f03d2ebe",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill/tests.rs",
+      "sha256": "00a0902dcf780fabbf61f151b70885af21123990eef47169180d0e8e239f866a",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill/update.rs",
+      "sha256": "898692ade767c0eb253e840d4100432e58932394c177fbc185f76b154af02bba",
+      "substitutions": []
+    },
+    {
+      "path": "services/skill/zip_install.rs",
+      "sha256": "8c613d148b5caf904309b1fd50c778d94ebeb40f18b9e9378f47b02001a92caa",
+      "substitutions": []
+    },
+    {
+      "path": "services/usage_stats/tests.rs",
+      "sha256": "289f7b8118db5df42ece92773acaf966c1304c596713ca477300e43c386bb342",
+      "substitutions": []
+    },
+    {
+      "path": "services/webdav_sync/archive.rs",
+      "sha256": "0ca6d54136b2da658b79c9e9dbc370e1f98bc26f69d9239f49e8ed0814e1d849",
+      "substitutions": []
+    },
+    {
+      "path": "services/workbuddy_account/mod.rs",
+      "sha256": "018c790bf69d8f8e7763acb7b84be61822f7fab6f940d037e35399898842ab49",
+      "substitutions": []
+    },
+    {
+      "path": "services/workbuddy_account/quota.rs",
+      "sha256": "97ada3fc93239d78ac60af9495ade90ec7229d97fdcbf6771dc2560bb779d33c",
+      "substitutions": []
+    },
+    {
+      "path": "services/workbuddy_account/tests.rs",
+      "sha256": "81290009ba2e66ee717a55379f5003bb118ae64b157fc80b2f2b5861b8d45255",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/.gitattributes",
+      "sha256": "27f4064efc175d9ac25bd825ebe1e5bd138efcef276c88cbcda7a92a3039b786",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/README.md",
+      "sha256": "d94e5ef3dbbed8ac4d8165bbc76451a83ea9cffcb68ada57001c6dc2215b6f0c",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/agy-1.5.14/enable-needs-config.stderr",
+      "sha256": "77d2dd1f2284eeac0f8b3c928022a5a8063621c1ccaf3c14d17d77b113cfc5b7",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/agy-1.5.14/install-in-use.stderr",
+      "sha256": "7451036016947c941522034f24267cd4f466c56bf679721d7db5dc48ba66b4c7",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/agy-1.5.14/install-needs-config.stdout",
+      "sha256": "dec0be77ec80fa22b24500446c9d41b5b3e63e049e17b0a94a9f35c28dad871d",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/agy-1.5.14/install-not-found.stderr",
+      "sha256": "b551ff87163210a9390fef9210a95774445ad1391fdabbb7f3a0e22b9890810f",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/agy-1.5.14/marketplace-official.json",
+      "sha256": "4eb2b4e0c2cb382727c00e914e797453a4173285b886ecdb616a818edf2acb4a",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/agy-1.5.14/marketplace-partners.json",
+      "sha256": "e32e581d2699d9c55ea814d1cf5b52550bc119faa50137595ef2bc3c2a3c9a9c",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/agy-1.5.14/plugin-list.json",
+      "sha256": "3aedc960f1e7d2545c40d93d3f756bd263a410648b59f67a19ffe10483370430",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/claude-2.1.318/disable.json",
+      "sha256": "e99df65c7fbcd77921a9206e6395a2389745fb477c437be75d39ff8ff474ebf2",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/claude-2.1.318/install-needs-confirm.stdout",
+      "sha256": "eae0c4174be6710695c99d1a1594b0d00c96e7ca4fa3cf35763afceee45575bd",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/claude-2.1.318/install-not-found.json",
+      "sha256": "4f4ce305c371a2d6310ca85c29257d68b65ed79ae0aadd5a31a06710f1dcf0a0",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/claude-2.1.318/install-ok.json",
+      "sha256": "5dd47eccd614a367b3c3f0bf0466a30e4fb1c9501b18a8f5fef438181b74f593",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/claude-2.1.318/marketplace-list.json",
+      "sha256": "bb9ba581c2b2c1e2fdc260b8f070fd58f90e570a32a12a0983f97c29be5f790b",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/claude-2.1.318/marketplace-update.json",
+      "sha256": "9dc77561d2754651803842ecb8d6f4e64b6090d397d24d8b8a022b419d1c31bb",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/claude-2.1.318/plugin-list-available.json",
+      "sha256": "e04ebe79519c01dab8b3e88caf94c2ed07af26d0203768026b9258ffecb6e41a",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/claude-2.1.318/plugin-list.json",
+      "sha256": "688efbc9644668495b5e1792ad13a21884fa84eb67d5c8470da764c51d61fb88",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/claude-2.1.318/update-up-to-date.json",
+      "sha256": "14a02713f14b7b5c9b372a6528943c6d04760e731947a834ccaaa5b7f75bc50c",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/add-not-found.stderr",
+      "sha256": "88251705c1a92d8449ce3972e19743c9db708a13c47cf70a128b4c1ba699c84b",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/add.json",
+      "sha256": "0d0e52d3ab2b66c790f0d7954b39f0a3a0511eae64d53a18c8dee1ebbb8afb6f",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/config.toml",
+      "sha256": "6474515caef8bd2f8f44c59ba2fe9ea5dfc9a6a86207444a96ceb6c9042484c8",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/marketplace-add-again.json",
+      "sha256": "cf9c3549573a9f68a6bdbf41005b12562a306738241ce599a408295f74cd50bd",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/marketplace-add.json",
+      "sha256": "7699a0642e408e55d2ca4c1657dd4307b47ec1f252d3d5875010b641db92cda1",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/marketplace-list.json",
+      "sha256": "6d6bfb95c0367af26d2135a15063699b1fd49bda789e74305c284314e04ce383",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/marketplace-upgrade.json",
+      "sha256": "7b0277e56afdf927727d35db86e2e4054ddd1d6e516d82fd99959f321e64ff21",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/plugin-list-available.json",
+      "sha256": "5b240e0b1807562aa25d9fcdef63b058099cc64e6d087c28aefb1bdf3ca6b9d7",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/plugin-list.json",
+      "sha256": "147c439742b20220aae765f8075b49f1edd99711a6d02ae613291e6af76d028d",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/codex-0.167.0/remove.json",
+      "sha256": "36ca0e1bc81634acff67624a119ff2e4f238f97123d663427c474247258d481b",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/grok-1.0.70/config.toml",
+      "sha256": "641211cee0313ebdda4ab7e2bc3c94cbc8aebf9207bf5d47e7b2149f67cad152",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/grok-1.0.70/marketplace-list.json",
+      "sha256": "5182b00bc87510d20b36964f7aaf94e2cf64a1d481e70005d7b766276b7aa2a4",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/grok-1.0.70/plugin-list-available.json",
+      "sha256": "c6e83c6e8dd0e200ecb07ddda840543c668d8f5e267f4033424c27d9ca768079",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/grok-1.0.70/plugin-list.json",
+      "sha256": "c6e83c6e8dd0e200ecb07ddda840543c668d8f5e267f4033424c27d9ca768079",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/grok-1.0.70/update-changed.txt",
+      "sha256": "49ad1bd0e3dd0d6fea5780f5e8102ba575be3ad0fd8ef10d089f4855d3c0aa3d",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/grok-1.0.70/update-up-to-date.txt",
+      "sha256": "96011a0b154b3e9512799a9af51ad4cb1645fa9d326a010552b693ed1bfc0093",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/mcode-0.7.4/add-auth-required.stderr",
+      "sha256": "1ce52e1c2814972913814287e2edb171ac3b0425a5989638f47fb83d8ef9d5c7",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/mcode-0.7.4/add-not-found.stderr",
+      "sha256": "4836efee444a39cf6c301161931dd52bd323d1916c9ff62ec720a2ee579268e4",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/mcode-0.7.4/plugin-list-available.json",
+      "sha256": "61b5618874f5674bafc538345e9910b96a73661dfa988a28f8607694565e7cc5",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/mcode-0.7.4/plugin-list.json",
+      "sha256": "050e2dee988ae4ba4d1d8220591b660829a9ee3f06f52d548acc87522ee90885",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/openclaw-2026.11.1/marketplace-entries.json",
+      "sha256": "19ea8fd8eae043b1e4de9277c80c53d0eefb964a374bd06a66aae0a1f7ccd718",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/openclaw-2026.11.1/marketplace-refresh.json",
+      "sha256": "93baa83fcf486a2bb50cd90f4dc1b5062aa19c407938da02269961bc62c02d84",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/openclaw-2026.11.1/plugins-list.json",
+      "sha256": "87b535437f2239f8fd553d767d0d0a2ea230dc2f325ad2bc7b08ae56e143aeb1",
+      "substitutions": []
+    },
+    {
+      "path": "services/plugin_manager/fixtures/openclaw-2026.11.1/update-up-to-date.txt",
+      "sha256": "7a459f4f127eff8b52e886fdd80de3e68227fdb1a5e4fdb2222f21fad393a5b8",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/snapshot/creds.rs",
+      "sha256": "d3ddf5d659ed9a55856d9df0fe484abb517b42fc70be1e51956fa8702211f54d",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/snapshot/files.rs",
+      "sha256": "888cbe362276f9fac12e3e809eddb6da092134dcda046ee35b878bab2cf464d6",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/snapshot/mod.rs",
+      "sha256": "6b43fcccd20d20eb5c73b8a53975779facc18c9e1dbe1ab534eb6cc9bee40ddf",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/snapshot/recover.rs",
+      "sha256": "ad0d1172485311ec516a5d4f7a618ab829c0a4d8b0b7cf8711112323b8fe9bfd",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/snapshot/state.rs",
+      "sha256": "d851cb6898741638e2b4324bc96960680ea7d5169ff8270a74e7e4654ac2090d",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/snapshot/store.rs",
+      "sha256": "9138011997fa9ca44fecb9c9a0ed4d89f07194fe5cef7a1748252e5ad43af240",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/snapshot/switch.rs",
+      "sha256": "769b75b0e1ce87d56d2822da29674787f712bb56804d523bc2c746d71b39663b",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/snapshot/tests.rs",
+      "sha256": "63d947e2534e4380b6c5ae5be4f84bdc3564fb2e2c78c6bf664845bea9eadbdf",
+      "substitutions": []
+    },
+    {
+      "path": "services/claude_account/snapshot/store/keychain.rs",
+      "sha256": "b650dd6662c0fc21db5b4fd58f37b9e57a1c675a972721c01205e22398580ab6",
+      "substitutions": []
+    },
+    {
+      "path": "services/agy_account/keychain/linux.rs",
+      "sha256": "4d79a76886d79d399ed6982a7c16cd4d617da908d17422ebc9e5199e0e4e70f6",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/cache.rs",
+      "sha256": "309cf4e6af8927954488c93ccd37466c189109a04027a0f395b2f863dfe5badd",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/content.rs",
+      "sha256": "73686d2456a1802887d120e43a7b6832afab775fb706e19bf6e1f5a14f0e0eff",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/hermes_wsl.rs",
+      "sha256": "e1c572c26160def32f1964a2c052f6ee20323da3a56ce3d67b992227031ceabc",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/hermes_wsl_reader.py",
+      "sha256": "f36d986946f5df8b8a40fd8fab5a573c79793ac8052171914a28059de0599d8f",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/mod.rs",
+      "sha256": "d1450f5f41d587f93e2f5ceff7f9140e0880bcc2b47cc6af5345bb369000156a",
+      "substitutions": [
+        "Only Codex sessions are enumerated on Android"
+      ]
+    },
+    {
+      "path": "session_manager/model.rs",
+      "sha256": "cc2a5f3229b217a9251c9bda7e5780d97f0ade4b96794340a81dbef1f236a893",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/search.rs",
+      "sha256": "8b138800f568b7544591328f16b5f0f3bc46ae7c165da64d573ff71a42f0408b",
+      "substitutions": [
+        "Original persistent FTS and background indexing use scoped private cache; pause before grant changes"
+      ]
+    },
+    {
+      "path": "session_manager/search_revision.rs",
+      "sha256": "f068acaeb3b5897fd19186cc0762e189c130d4c5cfd2fc8e74b5e5860560a953",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/agy.rs",
+      "sha256": "270a70a919b2ae381fd3ea93270c27681be8573c9007ea55fbe4bd81e9918740",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/blocks.rs",
+      "sha256": "f834cc6a7fb95fd255809775536eaeb48a99e65537e060b3a07bbd90e2d24f1b",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/claude.rs",
+      "sha256": "334e82cb3c1e6f3f06c5a1a69affb5ef1acc5a681651dca2d0824948faa974a7",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/codex.rs",
+      "sha256": "f827f51ef0481698cca6e7b8780851af090082807a4e94e7c39cb434c2dff867",
+      "substitutions": [
+        "Original transcript and metadata reader uses the SAF read-only session cache"
+      ]
+    },
+    {
+      "path": "session_manager/providers/codex_items.rs",
+      "sha256": "32ff00077cfb119216948fa5b3669f1f45c604160ec07ebfdb26aad82a88c023",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/copilot.rs",
+      "sha256": "31235eb225d36e164584e645d012d0bc7ade14cc69a9541d201f7ae1ca344e0f",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/dsh.rs",
+      "sha256": "f2de67afcc6a8f083bc70e22f0fc8e26cf45d9f4d138cfaed992bf9dd36abe70",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/gemini.rs",
+      "sha256": "f24cfb3ecd990fd763ebc92dd9e31e8cee01edf87f94e544c565a56ed5a4cf0b",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/grokbuild.rs",
+      "sha256": "08f6bf8188e2ca349078f28700aae05d1cbc5fa7021d4e237c72abe108e551ba",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/hermes.rs",
+      "sha256": "9d6bc153943847d02e6637b50e654789913cdf63d4080d9fdfe726261bb6423e",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/kimi.rs",
+      "sha256": "15cc0a3caed5fae10733c806fbca46179835fd70e57e59467aa004bce929ef7f",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/mcode.rs",
+      "sha256": "78f5ab8a95be2100e3131f1ef1f4fc32ff54473d8bdd7ac80fbb51bdc67b7afa",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/mod.rs",
+      "sha256": "c250e024c9bf80f0ad07291fae7c3e69ca88e73fbf796e3a8a75d6eb9c53e28a",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/omp.rs",
+      "sha256": "5427a65112ecf66dc56eb60a1057d37d6fea4df327465ecd4f86b3133f07e6f8",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/openclaw.rs",
+      "sha256": "d311b7b218ee6bf3faecaef690c6f54b5445e406b6448d114861b6a7d3ab1d84",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/opencode.rs",
+      "sha256": "70003401893732ab74baababc275d5b1bb50fa7d03f11c692f2d20ff670cba58",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/opencode_blocks.rs",
+      "sha256": "4f16aa57a85f4a3d0632a841d5dabde24ad74a57dcd2852dc9e29d44b0ac52c5",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/pi.rs",
+      "sha256": "aefbab1e82cb58f83c82b4644a0e06a7c184619d26c153ef3216e42e467eb484",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/pi_blocks.rs",
+      "sha256": "068f706132a2cb62bbda8dbc0254c38485c3ab10be5af030276e632b04239813",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/utils.rs",
+      "sha256": "53236254869e9d27962639250ef2754131db13ce6562bdebce850dccb189b626",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/providers/workbuddy.rs",
+      "sha256": "7173a7161ba1dc4b82a5533e93da9132882b22c232a4983c2f57a8c68630a62b",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/terminal/mod.rs",
+      "sha256": "90e8df140f2e031dbb32ff7213d60abe0dafbf7719e28321dd1df735b92a5049",
+      "substitutions": []
+    },
+    {
+      "path": "session_manager/search/tests/cancellation.rs",
+      "sha256": "9f0a82b3fc11fb2ee82910a6420475a570ebcd302e9a9d9ea180978a0a39e940",
+      "substitutions": []
+    },
+    {
+      "path": "settings.rs",
+      "sha256": "ba419290f862d3395c7f5798b530b1a55dc7a3a037a7be8ccfff2e6bfc8df950",
+      "substitutions": []
+    },
+    {
+      "path": "store.rs",
+      "sha256": "0127d1315a30c9791dbca6c08b2f32c1f5d5839edaa8fed3096fce98ba8e6596",
+      "substitutions": []
+    },
+    {
+      "path": "sync_utils.rs",
+      "sha256": "6b125692ca87d51f089c84054a18baf2fdb5dc36708d043b916e7435ab743b66",
+      "substitutions": []
+    },
+    {
+      "path": "test_support.rs",
+      "sha256": "ae9fa6dafe47fe7180201c0747a9e3fb311b218247ddb4138541793651783070",
+      "substitutions": []
+    },
+    {
+      "path": "usage_events.rs",
+      "sha256": "a57039aa4d20044df663ae4274b503befafd376bc5997f1b38d86028e193a6c9",
+      "substitutions": [
+        "Tauri event/state/runtime transport -> Android platform transport"
+      ]
+    },
+    {
+      "path": "usage_script.rs",
+      "sha256": "02f282c96e4b49b10eb19ed95b40687f196daa64d552fd2188390b6111193092",
+      "substitutions": []
+    },
+    {
+      "path": "workbuddy_config.rs",
+      "sha256": "7bc4ddc5385a39100daf280644f6ed9aecdfdbef36ffba8309adca8a297988db",
+      "substitutions": []
+    },
+    {
+      "path": "commands/failover.rs",
+      "sha256": "4265ec9ae7f41cd888e5be8c93629779092f85102fd100bb4212838eafc0e729",
+      "substitutions": [
+        "Tauri command transport -> Android JNI"
+      ]
+    },
+    {
+      "path": "commands/settings.rs",
+      "sha256": "2d76c61ea2004fe73ded65899709217fe28f49b20939e036ef52923e08eb617d",
+      "substitutions": [
+        "Tauri command transport -> Android JNI",
+        "Desktop updater/tray effects omitted; existing-history migration reports SAF limitation, configuration resync/rollback unchanged"
+      ]
+    }
+  ]
+}

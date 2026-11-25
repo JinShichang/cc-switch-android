@@ -630,7 +630,10 @@
       "deleteSuccess": "备份已删除",
       "deleteFailed": "删除失败",
       "deleteConfirmTitle": "确认删除备份",
-      "deleteConfirmMessage": "此备份将被永久删除，此操作无法撤消。"
+      "deleteConfirmMessage": "此备份将被永久删除，此操作无法撤消。",
+      "maxTotalLabel": "备份总大小上限",
+      "maxTotalUnlimited": "不限制",
+      "maxTotalHint": "默认不限制。设置后，备份文件夹超过此大小时，会从最旧的备份开始删除。最新的一份备份和恢复正在使用的备份始终保留，所以单份备份比上限还大时，文件夹仍可能超过上限。在下次备份或每日维护时生效。"
     },
     "backupStorage": {
       "title": "其他备份",
@@ -891,6 +894,15 @@
         "createdAt": "上传时间",
         "warning": "将覆盖该 S3 路径下已有的同步数据",
         "confirm": "确认上传"
+      },
+      "clear": "清除配置",
+      "clearing": "清除中...",
+      "clearSuccess": "已清除本机的 S3 配置",
+      "clearFailed": "清除配置失败：{{error}}",
+      "clearConfirm": {
+        "title": "清除 S3 配置",
+        "message": "将从本机删除已保存的 S3 区域、存储桶、Access Key、Secret Key、端点和远程目录，并停止自动同步。存储桶中已上传的数据不会被删除。",
+        "confirm": "清除"
       }
     },
     "autoReload": "数据已刷新",
@@ -1211,7 +1223,8 @@
         "invalidResponse": "服务返回无效数据",
         "unavailable": "服务无法提供数据"
       }
-    }
+    },
+    "toolUpgradeDesktopManagedDetail": "这个 OpenCode CLI 由 OpenCode Desktop 捆绑提供，并随 Desktop 应用更新。"
   },
   "apps": {
     "claude": "Claude",
@@ -1477,6 +1490,7 @@
     "contentSearchToggle": "搜索消息正文",
     "contentSearchToggleFailed": "无法更改正文搜索设置：{{error}}",
     "contentIndexing": "正在建立正文索引（{{processed}}/{{total}}），正文结果可能还不全",
+    "contentSearchFailed": "正文搜索失败，暂时只能按标题、目录和首末消息查找",
     "contentHitPrefix": "正文：",
     "contentHitMore": "（{{count}} 条消息命中）",
     "moreContentHits": "更多正文命中",
@@ -1511,7 +1525,7 @@
     "expandContent": "展开完整内容",
     "collapseContent": "收起",
     "helpTitle": "会话从哪里来",
-    "helpBody": "CC Switch 通过系统目录授权读取 Codex 会话记录。位置见右上角“会话记录在哪里”。",
+    "helpBody": "CC Switch 读取各个应用保存在本机的会话记录，位置见右上角 ⋯ 里的「会话记录在哪里」。Claude Desktop 没有单独的会话记录。",
     "moreActions": "会话的更多操作",
     "refreshList": "刷新列表",
     "listRefreshed": "已刷新会话列表",
@@ -1519,7 +1533,7 @@
     "preferredTerminal": "首选终端",
     "whereMenu": "会话记录在哪里",
     "whereTitle": "会话记录在哪里",
-    "whereLead": "CC Switch 通过系统目录授权读取 Codex 会话记录。位置见右上角“会话记录在哪里”。",
+    "whereLead": "CC Switch 从这些位置读取会话。Claude Desktop 没有单独的会话记录。",
     "whereNote": "在设置里改过配置目录的应用，按改过的目录读取。",
     "appPrefix": "应用：",
     "chooseApp": "选择应用",
@@ -1530,7 +1544,7 @@
     "groupBy": "分组方式",
     "groupByTime": "按时间",
     "groupByProject": "按项目",
-    "desktopNote": "CC Switch 通过系统目录授权读取 Codex 会话记录。位置见右上角“会话记录在哪里”。",
+    "desktopNote": "Claude Desktop 没有单独的会话记录，这里显示 Claude Code 的会话。",
     "dshMergedNote": "DeepSeek Harness 的 Web 和 Desktop 共用同一份会话记录，这里合并显示。",
     "matchCount": "匹配 {{count}} 个会话",
     "totalCount": "共 {{count}} 个会话",
@@ -1683,7 +1697,17 @@
         "prLink": "已关联 PR #{{number}}",
         "prLinkPlain": "已关联 PR",
         "slashCommand": "运行了 {{command}}",
-        "subAgent": "子代理 {{name}}"
+        "subAgent": "子代理 {{name}}",
+        "goal": "目标 · {{status}}",
+        "goalPlain": "目标",
+        "goalStatus": {
+          "active": "进行中",
+          "paused": "已暂停",
+          "blocked": "受阻",
+          "usageLimited": "额度已用尽",
+          "budgetLimited": "已达预算",
+          "complete": "已完成"
+        }
       },
       "injectedToggle": "显示注入的上下文",
       "injectedRow": "上下文 · {{label}} · {{chars}} 字",
@@ -1750,6 +1774,7 @@
       "outlineFailed": "有失败步骤",
       "outlineAborted": "已中断",
       "outlineNoReply": "没有回复",
+      "chapter": "章节",
       "viewOptions": "显示选项",
       "noChanges": "这个会话没有文件改动",
       "rawMatch": "原文中的匹配",
@@ -1778,6 +1803,9 @@
     "openReleaseNotesFailed": "打开更新日志失败:"
   },
   "providerForm": {
+    "billingMultiplier": "供应商费用倍率",
+    "billingMultiplierHelp": "该供应商所有模型的参考价都乘以这个值，用来估算经本地路由的请求花了多少钱。0.5 即半价，留空为 1 倍。只影响之后的请求；不开路由（直连）时从会话记录导入的用量仍按 1 倍统计。",
+    "billingMultiplierInvalid": "请输入 0 到 1000 的数字，或留空使用 1 倍。",
     "nativeConfig": {
       "title": "配置文件 {{path}}（只显示这一家）",
       "hint": "按应用自己的格式显示这一家在文件里的部分，保存后写进这个文件；默认模型等全局设置不在这里。在这里写的注释不会保存。",
@@ -1838,6 +1866,7 @@
       "subrouter": "SubRouter 是中转站聚合平台，一个 Key 可接入多个模型与供应商。",
       "qiniu": "七牛云是多协议 AI 中转平台，一个 Key 即可调用原生 Claude、GPT、Gemini 模型，兼容 Anthropic、OpenAI、Gemini 多种接口。",
       "haoai": "hao.ai 是面向开发者与团队的高速、稳定大模型统一 API 网关：一个 Key 即可接入 GPT、Claude、Grok 等主流模型，兼容 OpenAI、Anthropic 协议，提供模型路由、故障回退与完整调用日志，价格低至官方参考价的 1.5 折。CC Switch 用户通过此链接注册，首单可享 5% 赠送额度！",
+      "stringai": "弦界 StringAI 是高性价比、高效稳定的模型 API 平台，一站式接入 AI 编程、图像生成、语音合成和视频生成四大能力。CC Switch 用户专属福利：通过此链接注册，首充 25 元送 25 元额外奖励额度！",
       "fenno": "Fenno.ai 是稳定高效的 API 中转服务商，可接入多种主流模型。CC Switch 用户专属福利：通过此链接订阅 1.99 刀 /50 刀额度的 Trial 计划，有效期 7 天！",
       "teamorouter": "TeamoRouter 让 Claude Code 一个 Key 直接用 Opus 5.5、Sonnet 5.5、Fable 5.1，Opus 5.5 约为官方价 2.8 折，按量计费，原生 Anthropic 协议。CC Switch 用户通过此链接注册，首充 $10 / $20 / $50 额外多送 10% 额度！",
       "ppio": "PPIO 是国内领先的独立 Agentic Cloud 服务商，一个 API Key 调用全部旗舰开源模型。通过此链接注册并完成实名认证，即可获得 ¥10 代金券。",
@@ -1952,6 +1981,8 @@
     "requestModelLabel": "实际请求模型",
     "modelOneMHeader": "声明支持 1M",
     "modelOneMLabel": "1M",
+    "copilotOneMUnavailable": "Copilot 没有这个模型的 1M 版本",
+    "copilotOneMMismatch": "Copilot 没有 {{models}} 的 1M 版本：请求会退回普通版本，但 Claude Code 仍按 1M 规划上下文，长会话可能超出上限。建议取消勾选 1M。",
     "fallbackModelLabel": "默认兜底模型",
     "fallbackModelHelpDirect": "写进 ANTHROPIC_MODEL，是 Claude Code 启动时用的主模型。后台任务另用 Haiku 那一档。",
     "fallbackModelHelp": "没落到 Sonnet、Opus、Fable、Haiku 任一档的请求，改用这个模型发给上游。",
@@ -2094,7 +2125,6 @@
     "enterCode": "请在浏览器中输入以下验证码：",
     "accountCount": "{{count}} 个账号",
     "selectAccount": "选择账号",
-    "chatgptAccount": "ChatGPT 账号",
     "accountToUse": "使用的账号",
     "signInMethod": "登录方式",
     "manageAccounts": "管理账号",
@@ -2104,18 +2134,14 @@
     "explicitSelectionRequired": "请先选择登录方式",
     "useDefaultAccount": "使用默认账号",
     "noneOptionLabel": "跟随 Codex 登录",
-    "reauthDescription": "为与浏览器登录行为保持一致，这些账号需要重新登录以补全所需的登录凭据（id_token）。重新登录后即可正常用于托管绑定。",
     "reauthBadge": "需要重新登录",
-    "reauthLogin": "重新登录",
     "reauthSelectHint": "该账号需重新登录以启用托管绑定。",
     "reauthNow": "立即重新登录",
     "duplicateAccount": "该 ChatGPT 账号已添加，请直接使用现有账号。",
-    "loggedInAccounts": "已登录账号",
     "defaultAccount": "默认",
     "selected": "已选中",
     "removeAccount": "移除账号",
     "setAsDefault": "设为默认",
-    "addAnotherAccount": "添加其他账号",
     "logoutAll": "注销所有账号",
     "retry": "重试",
     "copyCode": "复制代码",
@@ -2124,7 +2150,6 @@
     "loginMethod": "登录方式",
     "browserLogin": "浏览器登录",
     "deviceCodeLogin": "设备代码登录",
-    "openBrowserLogin": "打开浏览器登录",
     "loginExpired": "登录已过期，请重试。"
   },
   "xaiOauth": {
@@ -2199,7 +2224,7 @@
   "codexConfig": {
     "authJson": "auth.json (JSON) *",
     "authJsonPlaceholder": "{\n  \"OPENAI_API_KEY\": \"sk-your-api-key-here\"\n}",
-    "authJsonHint": "此方案的认证输入保存在 CC Switch 加密存储中；应用 API Key 时写入服务商 bearer token，不覆盖 Codex 的 auth.json 或钥匙串。",
+    "authJsonHint": "Codex auth.json 配置内容",
     "authJsonStorageHint": "路由模式下显示的是存储的 auth 配置，不是实时的 auth.json",
     "configToml": "config.toml (TOML)",
     "configTomlHint": "Codex config.toml 配置内容",
@@ -2242,27 +2267,27 @@
     "subagentModelPlaceholder": "留空则跟随主模型",
     "subagentReasoningEffortLabel": "子代理推理强度",
     "subagentReasoningEffortDefault": "默认强度",
-    "subagentModelHint": "子代理默认使用的模型与推理强度。留空沿用主代理；只填模型时使用该模型默认强度。",
+    "subagentModelHint": "Codex 派出的子代理默认用的模型和推理强度。留空时沿用主代理的；只填模型时用该模型自己的默认强度。聚合模式下不生效，改用聚合页签「聚合设置」里的子代理模型。",
     "subagentModelNotInCatalog": "该模型不在模型列表中：Codex 拿不到它的上下文窗口；经路由转成 Chat / Anthropic 协议时会被换成默认模型。",
     "agentMaxThreadsLabel": "子代理并发上限",
-    "agentMaxThreadsHint": "一个 Codex 会话的子代理并发上限，不含主代理。最小为 1，留空不指定。这是 Codex 全局设置，保存后对所有供应商生效。",
+    "agentMaxThreadsHint": "一个 Codex 会话里最多同时开多少个子代理（不含主代理），切换供应商时保持不变。留空用 Codex 默认值（经典子 agent 工具 6 个，新版工具 3 个），最小为 1，不支持不限。新对话生效。",
     "agentMaxThreadsPlaceholder": "留空则用 Codex 默认值",
     "agentMaxThreadsV2Override": "config.toml 的 [features.multi_agent_v2] 写了总数 {{total}}（含主代理），使用新版子 agent 工具时以它为准。",
     "autoReviewModelLabel": "自动审批模型",
-    "autoReviewModelHint": "Codex 自动审批使用的模型，与主对话连接同一家供应商。只能选择本方案模型列表中的模型，修改后需完整重启 Codex。",
+    "autoReviewModelHint": "Codex 开了自动审批（Approve for me）时，判断操作能不能放行用的模型。审批请求和主对话发给同一家，所以只能选这张卡模型列表里的。聚合模式下不生效，改用聚合页签「聚合设置」里的自动审批模型。改完需要重启 Codex。",
     "autoReviewModelCodexDefault": "Codex 默认（codex-auto-review）",
     "autoReviewModelMainDefault": "主模型自己审批（默认）",
     "autoReviewModelNoList": "这张卡没有模型列表：Codex 会用官方的 codex-auto-review 审批，只有部分转发 ChatGPT 账号的中转认它，不认就会报 404。在上面的模型列表里加上模型后就能选。",
     "officialSpeedTiersLabel": "保留官方 Fast 档",
-    "officialSpeedTiersHint": "保留已内置官方模板中的 Fast 档；目前仅内置 gpt-5.5 模板，其他模型不会虚构 Fast 能力。上游必须支持 service_tier=priority。",
+    "officialSpeedTiersHint": "让模型列表里的 GPT 模型保留官方的 Fast 速度档，Codex 选了 Fast 后请求会带 service_tier=priority。只有转发官方 ChatGPT 账号的中转（如 CPA）才认，会更快消耗额度；其他上游可能报错或按更高价计费。打开后，之前在官方卡下选过的 Fast 会立刻在这家生效。聚合模式下不生效。改完需要重启 Codex。",
     "modelListHint": "修改后需要重启 Codex。",
-    "modelListDefaultHelp": "这些模型会出现在 Codex 的模型列表里，第一行是默认模型。可设置显示名、上下文窗口和思考等级；修改后需完整重启 Codex。",
+    "modelListDefaultHelp": "这些模型会出现在 Codex 的 /model 里，第一行是默认模型。名字是官方 GPT 模型的行按官方条目生成，行里的显示名、窗口和思考等级不生效。",
     "addCatalogModel": "手动添加",
     "modelListTitle": "模型列表",
     "stackModelDefaultHelp": "这些模型会出现在 Codex 的 /model 里，选中后请求直达这家。第一行是默认模型：这家被设为默认时，Codex 默认用它。",
     "defaultModelNotInList": "默认模型 {{model}} 不在列表里：Codex 默认仍请求它，但 /model 里没有这一项。",
     "addToModelList": "加入列表",
-    "modelListEmpty": "未配置额外模型列表，使用下面的默认模型。",
+    "modelListEmpty": "未配置模型：聚合模式下只发布下面的默认模型。",
     "catalogDisplayNamePlaceholder": "例如: DeepSeek V4 Flash",
     "catalogModelPlaceholder": "例如: deepseek-v4-flash",
     "catalogColumnDisplay": "菜单显示名",
@@ -2285,7 +2310,7 @@
     "inactiveFieldCopied": "已复制",
     "upstreamFormatCopilotRouteHint": "所有模式都需要开启路由，由路由注入 Copilot 账号凭据；手动指定的协议模型不支持时会报错。",
     "maxOutputTokensWarning": "不要超过模型或网关的真实输出上限，否则会返回 400。",
-    "routeOnlySettingsHint": "以下两项只在启用本机中转时生效。"
+    "routeOnlySettingsHint": "以下设置只在路由、聚合模式下生效。"
   },
   "geminiConfig": {
     "envFile": "环境变量 (.env)",
@@ -2431,7 +2456,7 @@
   },
   "usage": {
     "title": "使用统计",
-    "subtitle": "从已授权 .codex 目录读取 Codex 会话用量。价格为用户设置的估算价，不代表服务商实际账单。",
+    "subtitle": "查看 AI 模型的使用情况和成本统计",
     "today": "24小时",
     "last7days": "7天",
     "last30days": "30天",
@@ -2504,17 +2529,17 @@
       "title": "自动扫描会话记录",
       "description": "定期扫描各客户端的本地会话记录以统计用量；关闭后仅在手动同步时扫描",
       "syncNow": "立即同步",
-      "syncCompleted": "扫描完成：可统计 {{imported}} 条，扫描 {{files}} 个文件，错误 {{errors}}",
+      "syncCompleted": "同步完成：新增 {{imported}} 条，扫描 {{files}} 个文件，错误 {{errors}}",
       "syncFailed": "会话用量同步失败：{{error}}"
     },
     "rebuildCodex": {
       "title": "Codex 用量维护",
       "description": "从本地 rollout 日志重新构建 Codex 会话用量",
-      "warning": "从已授权日志重新计算当前统计缓存，不修改 Codex 原始日志。继承历史或不完整日志暂缓统计。",
+      "warning": "重建前会自动备份数据库。若源 JSONL 已删除，对应历史将无法重新导入。",
       "action": "重建 Codex 用量",
       "confirmTitle": "确认重建 Codex 用量",
-      "confirmMessage": "重新扫描已授权目录中的 Codex 日志并替换统计缓存。不会修改原始日志；已删除的日志将不再计入，无法确认基线的继承历史暂缓统计。",
-      "confirmAction": "重新扫描",
+      "confirmMessage": "此操作会清除现有 Codex 会话明细与汇总，再从本地 Codex 日志重新导入。\n\n已删除日志对应的历史将丢失；缺少父 rollout 的 fork 会暂缓导入。",
+      "confirmAction": "备份并重建",
       "completed": "重建完成：导入 {{imported}} 条，错误 {{errors}}，疑似重复 {{suspected}}，暂缓文件 {{deferred}}",
       "failed": "Codex 用量重建失败：{{error}}",
       "actionEllipsis": "重建 Codex 用量"
@@ -2570,8 +2595,8 @@
     "input": "Input",
     "output": "Output",
     "cacheWrite": "创建",
-    "cacheWriteNotReported": "OpenAI 协议不区分缓存写入，仅上报缓存命中",
-    "cacheWritePartial": "部分协议（如 OpenAI）不上报缓存写入，数值可能偏低",
+    "cacheWriteNotReported": "Gemini 和 Grok Build 不上报缓存写入，仅上报缓存命中",
+    "cacheWritePartial": "部分协议（如 Gemini）不上报缓存写入，数值可能偏低",
     "cacheRead": "命中",
     "baseCost": "基础",
     "costMultiplier": "成本倍率",
@@ -2643,7 +2668,6 @@
       "configLoadFailed": "加载本地定价配置失败：{{error}}",
       "neverSynced": "从未同步",
       "lastSync": "上次同步",
-      "commonStatus": "常用模型",
       "lastError": "上次自动同步失败：{{error}}",
       "localFile": "本地定价文件",
       "openFolder": "打开目录",
@@ -2713,7 +2737,7 @@
       "label": "指标",
       "more": "更多指标",
       "realTotalHelpTitle": "真实消耗 Tokens 怎么算",
-      "realTotalHelp": "新增输入 + 输出 + 缓存写入 + 缓存命中。新增输入不含缓存；部分协议（如 OpenAI）不上报缓存写入，这一项可能偏低。",
+      "realTotalHelp": "新增输入 + 输出 + 缓存写入 + 缓存命中。新增输入不含缓存；部分协议（如 Gemini）不上报缓存写入，这一项可能偏低。",
       "hitRateHelpTitle": "缓存命中率怎么算",
       "hitRateHelp": "缓存命中 ÷（新增输入 + 缓存写入 + 缓存命中）。"
     },
@@ -2788,7 +2812,9 @@
       "speedEstimateTooFew": "输出不到 200 token，不估速度",
       "noTimingSession": "会话日志没有计时数据",
       "noFirstToken": "没有首字计时，不算速度",
-      "providerId": "供应商 ID"
+      "providerId": "供应商 ID",
+      "copyRequestId": "复制请求 ID",
+      "requestIdCopied": "已复制请求 ID"
     },
     "sources": {
       "scanTitle": "自动扫描会话日志",
@@ -2808,7 +2834,7 @@
     },
     "empty": {
       "title": "还没有用量数据",
-      "body": "通过“立即同步”读取已授权目录中的 Codex 日志。",
+      "body": "会话日志和经路由服务的请求都会记在这里。",
       "configurePricing": "配置模型定价"
     },
     "pricing": {

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { Provider, ProviderEditorBase } from "./core/types";
-import { validateProvider, providerConfigFromEditor } from "./core/codex";
+import { validateProvider } from "./core/codex";
 import { parseConfig } from "./core/tomlPatch";
+import { canonical } from "./core/tomlPatch";
 import { invoke, isNative } from "./bridge";
 import { FullScreenPanel } from "./vendor/components/common/FullScreenPanel";
 import { BasicFormFields } from "./vendor/components/providers/forms/BasicFormFields";
@@ -12,6 +13,7 @@ import { useCodexConfigState } from "./vendor/components/providers/forms/hooks/u
 import { Form } from "./vendor/components/ui/form";
 import { Button } from "./vendor/components/ui/button";
 import { Switch } from "./vendor/components/ui/switch";
+import { ConfirmDialog } from "./vendor/components/ConfirmDialog";
 import {
   Dialog,
   DialogContent,
@@ -69,12 +71,21 @@ export function ProviderEditor({
   const [meta, setMeta] = useState<Record<string, any>>(() => {
     const next = { ...provider.meta };
     delete next.androidLoginPolicy;
+    if (!next.custom_endpoints && Array.isArray(next.customEndpoints)) {
+      next.custom_endpoints = Object.fromEntries(next.customEndpoints.map((url: string) => [url, { url, addedAt: Date.now() }]));
+    }
+    if (next.endpointAutoSelect === undefined && next.autoSelect !== undefined) next.endpointAutoSelect = next.autoSelect;
+    delete next.customEndpoints;
+    delete next.autoSelect;
     return next;
   });
   const change = (key: string, value: unknown) =>
     setMeta((prev) => ({ ...prev, [key]: value }));
+  const official=provider.category==='official';
+  const bound=meta.authBinding?.source==='managed_account'&&meta.authBinding.authProvider==='codex_oauth'?meta.authBinding.accountId??null:null;
   const [filter, setFilter] = useState(provider.historyFilter === true),
     [prompt, setPrompt] = useState(false),
+    [softIssues, setSoftIssues] = useState<string[]|null>(null),
     [error, setError] = useState(""),
     [endpointModal, setEndpointModal] = useState(false);
   const [headers, setHeaders] = useState(
@@ -126,10 +137,16 @@ export function ProviderEditor({
   } catch (e) {
     configError = (e as Error).message;
   }
-  const save = async () => {
+  const save = async (confirmed = false) => {
     setError("");
     try {
       if (configError) throw Error(configError);
+      if (!confirmed && !official && meta.providerType !== 'github_copilot' && meta.providerType !== 'xai_oauth') {
+        const issues=[];
+        if (!c.codexBaseUrl.trim()) issues.push('非官方供应商请填写 API 端点');
+        if (!c.codexApiKey.trim()) issues.push('非官方供应商请填写 API Key');
+        if (issues.length) {setSoftIssues(issues);return;}
+      }
       const auth = JSON.parse(c.codexAuth || "{}");
       if (!auth || Array.isArray(auth) || typeof auth !== "object")
         throw Error("auth.json 必须是 JSON 对象");
@@ -161,13 +178,7 @@ export function ProviderEditor({
           ...form.getValues(),
           settingsConfig: {
             auth,
-            config: editorBase
-              ? providerConfigFromEditor(
-                  provider,
-                  editorBase.config,
-                  c.codexConfig,
-                )
-              : c.codexConfig,
+            config: c.codexConfig,
             modelCatalog: {
               models,
               autoReviewModel: c.codexAutoReviewModel,
@@ -202,7 +213,7 @@ export function ProviderEditor({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             取消
           </Button>
-          <Button onClick={save} disabled={busy}>
+          <Button onClick={() => void save()} disabled={busy}>
             保存
           </Button>
         </div>
@@ -226,6 +237,15 @@ export function ProviderEditor({
             appId="codex"
             variant="classic"
             category={provider.category}
+            providerId={provider.id}
+            isCodexOauthPreset={official}
+            selectedCodexAccountId={bound}
+            onCodexAccountSelect={accountId=>change('authBinding',accountId?{source:'managed_account',authProvider:'codex_oauth',accountId}:{source:'provider_config'})}
+            codexOauthSelectionLabel="登录方式"
+            codexOauthNoneOptionLabel="使用 Codex 中的登录"
+            codexOauthNoneOptionDescription="沿用 Codex 已有登录；目录权限不能读取宿主钥匙串。"
+            codexOauthAllowUnboundSelection
+            codexOauthAllowUnboundSelectionWithoutStatus
             codexApiKey={c.codexApiKey}
             onApiKeyChange={c.handleCodexApiKeyChange}
             shouldShowApiKeyLink={false}
@@ -237,12 +257,10 @@ export function ProviderEditor({
             onFullUrlChange={(v) => change("isFullUrl", v)}
             isEndpointModalOpen={endpointModal}
             onEndpointModalToggle={setEndpointModal}
-            onCustomEndpointsChange={(v) => change("customEndpoints", v)}
-            autoSelect={meta.autoSelect ?? false}
-            onAutoSelectChange={(v) => change("autoSelect", v)}
-            speedTestEndpoints={(meta.customEndpoints ?? []).map(
-              (url: string) => ({ url }),
-            )}
+            onCustomEndpointsChange={(urls) => change("custom_endpoints", Object.fromEntries(urls.map(url => [url, meta.custom_endpoints?.[url] ?? { url, addedAt: Date.now() }]))) }
+            autoSelect={meta.endpointAutoSelect ?? false}
+            onAutoSelectChange={(v) => change("endpointAutoSelect", v)}
+            speedTestEndpoints={Object.values(meta.custom_endpoints ?? {}) as {url: string}[]}
             codexModel={c.codexModel}
             onModelChange={c.handleCodexModelChange}
             subagentModel={c.codexSubagentModel}
@@ -278,6 +296,8 @@ export function ProviderEditor({
             onAutoReviewModelChange={c.setCodexAutoReviewModel}
             officialSpeedTiers={c.codexOfficialSpeedTiers}
             onOfficialSpeedTiersChange={c.setCodexOfficialSpeedTiers}
+            billingMultiplier={meta.billingMultiplier ?? ""}
+            onBillingMultiplierChange={(v) => change("billingMultiplier", v)}
             customUserAgent={meta.customUserAgent ?? ""}
             onCustomUserAgentChange={(v) => change("customUserAgent", v)}
             localProxyHeadersOverride={headers}
@@ -307,8 +327,7 @@ export function ProviderEditor({
             {filter && (
               <>
                 <p className="text-caption text-fg-2">
-                  需要持续后台运行。当前供应商保存后同步应用，其他方案需点击启用；关闭后应用恢复直连，并重启
-                  Codex。
+                  需要持续后台运行。开启后应用供应商会启用上游路由；在路由和聚合模式下，过滤开关作用于后续请求。关闭开关后，可在模式页回到直连。
                 </p>
                 <Button
                   type="button"
@@ -334,11 +353,6 @@ export function ProviderEditor({
             authError={c.codexAuthError}
             configError={configError}
           />
-          <p className="text-caption text-fg-2">
-            auth.json 作为此方案的认证输入保存。应用 API Key 方案时写入服务商
-            bearer token，保留 Codex 的 auth.json
-            和钥匙串登录材料。其他本地代理参数需要启用中转；协议转换尚未移植的选项会在应用时明确报错。
-          </p>
           {(error || saveError) && (
             <p role="alert" className="text-danger-text break-words">
               {error || saveError}
@@ -346,6 +360,10 @@ export function ProviderEditor({
           )}
         </form>
       </Form>
+      <ConfirmDialog isOpen={!!softIssues?.length} variant="info" title="配置存在以下问题"
+        message={(softIssues??[]).map(issue=>`• ${issue}`).join('\n')+'\n\n仍要保存吗？保存后切换此供应商时可能失败，可以之后再补全。'}
+        confirmText="仍要保存" cancelText="取消" pending={busy}
+        onConfirm={()=>{setSoftIssues(null);void save(true);}} onCancel={()=>setSoftIssues(null)}/>
       <Dialog open={prompt} onOpenChange={setPrompt}>
         <DialogContent
           zIndex="top"

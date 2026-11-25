@@ -2,7 +2,10 @@ param(
     [string]$Tooling = (Join-Path $PSScriptRoot '../../.tooling'),
     [string]$Output = (Join-Path $PSScriptRoot '../../builds/cc-switch-android'),
     [switch]$Offline,
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$SkipCoreBuild,
+    [string]$WslDistribution = 'Ubuntu',
+    [string]$WslUser = 'cdx'
 )
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path $PSScriptRoot -Parent
@@ -45,10 +48,17 @@ try {
         if ($Offline) { $taskNpmArgs += '--offline' }
         Invoke-Logged 'npm.cmd' $taskNpmArgs
     }
+    $taskCoreScript='/mnt/' + $taskRoot.Substring(0,1).ToLowerInvariant() + $taskRoot.Substring(2).Replace('\','/') + '/tools/build-core.sh'
+    $taskNativeArgs=@('-d',$WslDistribution,'-u',$WslUser,'--exec','bash',$taskCoreScript)
+    if($Offline){$taskNativeArgs+='--offline'}
+    if(!$SkipCoreBuild){Invoke-Logged 'wsl.exe' $taskNativeArgs}
+    if(!(Test-Path -LiteralPath 'native/THIRD_PARTY_NOTICES.txt')){throw 'Native dependency notices missing. Run tools/native-notices.sh once.'}
     Invoke-Logged 'node.exe' @('tools/generate-notices.mjs')
     if (!$SkipTests) {
         Invoke-Logged 'npm.cmd' @('test')
-        & (Join-Path $taskRoot 'tools/test-native.ps1') -Jdk $env:JAVA_HOME 2>&1 | Tee-Object -FilePath $taskLog -Append
+        $taskTestArgs=@('-d',$WslDistribution,'-u',$WslUser,'--exec','bash',($taskCoreScript -replace 'build-core.sh$','test-core.sh'))
+        if($Offline){$taskTestArgs+='--offline'}
+        Invoke-Logged 'wsl.exe' $taskTestArgs
     }
     Invoke-Logged 'npm.cmd' @('run', 'build')
     Push-Location (Join-Path $taskRoot 'android')

@@ -24,6 +24,8 @@ export interface Provider {
   notes?: string;
   createdAt: number;
   updatedAt: number;
+  sortIndex?: number;
+  inFailoverQueue?: boolean;
 }
 
 export interface Ownership {
@@ -46,6 +48,12 @@ export interface Snapshot {
   revision: string;
   directory: DirectoryInfo;
   ownership?: Ownership;
+  authReadable?: boolean;
+  nativeMatches?: Record<string,"exact"|"related">;
+  loginStash?: import("../upstream/codexLogin.ts").LoginStash;
+  providers?: Provider[];
+  currentProviderId?: string;
+  catalog?: string | null;
   filteredRoutes?: Record<
     string,
     {
@@ -65,6 +73,7 @@ export interface Snapshot {
 export interface ProviderEditorBase {
   snapshot: Snapshot;
   config: string;
+  auth?: Record<string, unknown>;
 }
 
 export interface Backup {
@@ -77,6 +86,7 @@ export interface Backup {
 }
 
 export interface AppState {
+  startupError?: string;
   providers: Provider[];
   providerInitialization?: number;
   currentProviderId?: string;
@@ -86,6 +96,8 @@ export interface AppState {
   lastApplied?: { id: string; time: number; revision: string; treeUri: string };
   settings: { zoom: number; theme: "light" | "dark" | "system" };
   native: boolean;
+  mode?: import('../vendor/types/proxy').AppModeView;
+  backendVersion?: string;
   prompts?: import("../lib/api").Prompt[];
   documentBackups?: {
     id: string;
@@ -100,6 +112,8 @@ export interface AppState {
 export interface ApplyPlan {
   catalog?: { name: string; text: string };
   config: string;
+  auth?: string | null;
+  loginStash?: import("../upstream/codexLogin.ts").LoginStash;
   ownership: Ownership;
   changedFields: string[];
   warnings: string[];

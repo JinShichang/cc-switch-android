@@ -47,6 +47,8 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private SharedPreferences preferences;
     private EncryptedRepository repository;
+    private NativeCore core;
+    private NativeCore.Events coreEvents;
     private Call pickerCall;
     private Call notificationCall;
     private String exportText;
@@ -146,6 +148,16 @@ public final class MainActivity extends Activity {
     private void handle(Call call, String method, JSONObject args) {
         try {
             if (repository == null) { EncryptedRepository candidate = new EncryptedRepository(this); candidate.migrate(); repository = candidate; }
+            if (core == null) {
+                coreEvents = (event, payload) -> runOnUiThread(() -> {
+                    if (!destroyed && web != null) web.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent(" + JSONObject.quote(event) +
+                        ",{detail:JSON.parse(" + JSONObject.quote(payload) + ")}))", null);
+                });
+                core = NativeCore.get(this, coreEvents);
+                core.start(repository.copy());
+                core.startup();
+            }
             Object result;
             switch (method) {
                 case "fetchModels": result=NetworkTools.models(args);break;
@@ -163,17 +175,28 @@ public final class MainActivity extends Activity {
                     });return;
                 case "openBatterySettings":
                     runOnUiThread(()->{try{startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));}catch(Exception e){startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}});result=true;break;
-                case "prepareFilter": result=FilterService.prepare(this,args);break;
-                case "filterStatus": result=FilterService.status();break;
-                case "startFilter": FilterService.start(this);result=FilterService.status();break;
-                case "stopFilter": FilterService.stop(this);result=FilterService.status();break;
-                case "clearFilterRoutes":
-                    byte[] currentBytes=tree().read();String current=currentBytes==null?"":TreeAccess.utf8(currentBytes);
-                    if(current.contains("127.0.0.1:"+FilterServer.PORT+"/r/"))throw new AppFailure("filter_still_applied","当前配置仍使用本机过滤地址，请先应用直连方案。");
-                    FilterService.clear(this);result=true;break;
                 case "readUiData": result=repository.copy().optJSONObject("uiData");if(result==null)result=new JSONObject();break;
                 case "writeUiData": JSONObject ui=repository.copy();ui.put("uiData",args);repository.replace(ui);result=args;break;
                 case "bootstrap": result = state(); break;
+                case "native":
+                    String nativeCommand=args.getString("command");
+                    JSONObject payload=args.optJSONObject("payload")==null?new JSONObject():args.getJSONObject("payload");
+                    JSONObject cached=null;
+                    if(nativeCommand.equals("sync_session_usage")||nativeCommand.equals("rebuild_codex_usage")||nativeCommand.equals("list_sessions"))cached=SessionCache.synchronize(this,tree());
+                    result=core.call(nativeCommand,payload);
+                    if(cached!=null&&coreEvents!=null){
+                        JSONArray warnings=cached.getJSONArray("errors");
+                        coreEvents.emit("android-data-warning",JSONObject.quote(warnings.length()==0?"":warnings.length()+" 个会话读取问题；本次会话或统计可能不完整。"));
+                    }
+                    if(cached!=null&&result instanceof JSONObject synced){
+                        JSONArray errors=synced.optJSONArray("errors");if(errors==null)errors=new JSONArray();
+                        JSONArray more=cached.getJSONArray("errors");for(int i=0;i<more.length();i++)errors.put(more.get(i));
+                        synced.put("errors",errors);
+                    }
+                    break;
+                case "nativeLog": result=true;break;
+                case "startRouter": RouterService.start(this); result=true; break;
+                case "stopRouter": core.call("stop_proxy_with_restore",new JSONObject());RouterService.stop(this);result=true;break;
                 case "readCurrent": result = snapshot(tree()); break;
                 case "providerStatus": result = DocumentPicker.status(this); break;
                 case "openCodex":
@@ -181,9 +204,14 @@ public final class MainActivity extends Activity {
                     if (codex == null) throw new AppFailure("codex_missing", "未安装可打开的 Codex 应用。");
                     runOnUiThread(() -> startActivity(codex));
                     result = new JSONObject().put("opened", true); break;
+                case "openExternal":
+                    Uri external=Uri.parse(args.getString("url"));
+                    if(!Set.of("https","http").contains(external.getScheme())||external.getHost()==null)throw new AppFailure("invalid_url","仅支持 HTTP / HTTPS 链接。");
+                    runOnUiThread(()->{try{startActivity(new Intent(Intent.ACTION_VIEW,external));}catch(Exception failure){failure(call,new AppFailure("browser_unavailable","没有可打开此登录链接的浏览器。"));}});
+                    result=true;break;
                 case "readRevision":
                     TreeAccess revisionAccess = tree();
-                    result = new JSONObject().put("revision", TransactionEngine.revision(revisionAccess.read(), revisionAccess.auth()));
+                    result = new JSONObject().put("revision", snapshot(revisionAccess).getString("revision"));
                     break;
                 case "chooseDirectory": launchPicker(call, TREE_PICKER, null); return;
                 case "importFile": launchPicker(call, IMPORT_PICKER, null); return;
@@ -195,28 +223,23 @@ public final class MainActivity extends Activity {
                     exportMime = exportName.endsWith(".md") ? "text/markdown" : "application/json";
                     launchPicker(call, EXPORT_PICKER, text); return;
                 case "releaseDirectory":
+                    RouterService.stop(this);core.call("suspendDocuments",new JSONObject());
                     String saved = preferences.getString("uri", "");
                     if (!saved.isEmpty()) {
                         try { getContentResolver().releasePersistableUriPermission(Uri.parse(saved), GRANTS); } catch (SecurityException ignored) { }
                     }
                     if (!preferences.edit().clear().commit()) throw new AppFailure("preferences_write", "无法保存目录授权设置。");
+                    core.bind("");
                     result = state(); break;
                 case "initializeProviders": result = initializeProviders(args); break;
                 case "saveProviderEditor": result = saveProviderEditor(args); break;
                 case "saveProviders":
-                    JSONArray providers = args.getJSONArray("providers");
-                    if (providers.length() > 200) throw new AppFailure("profile_limit", "最多保留 200 个服务商方案。");
-                    Set<String> ids = new HashSet<>();
-                    for (int i = 0; i < providers.length(); i++) {
-                        JSONObject item = providers.getJSONObject(i);
-                        if (!ids.add(item.getString("id")) || item.getString("name").trim().isEmpty() || item.getJSONObject("settingsConfig").getString("config").length() > TreeAccess.MAX_CONFIG) {
-                            throw new AppFailure("invalid_profile", "方案结构、大小或标识不正确，没有保存。");
-                        }
-                    }
-                    JSONObject next = repository.copy();
-                    next.put("providers", providers);
-                    repository.replace(next);
+                    core.call("saveProviders", args);
                     result = state(); break;
+                case "saveProvider":
+                    if(!preferences.getString("uri", "").isEmpty()) rememberBackup("保存供应商配置");
+                    core.call("saveProvider", args);
+                    result = new JSONObject().put("state", state()).put("saved", true).put("runtimeConfirmed", false); break;
                 case "settings":
                     int zoom = args.getInt("zoom");
                     String theme = args.getString("theme");
@@ -234,8 +257,10 @@ public final class MainActivity extends Activity {
                         JSONObject prompt = prompts.getJSONObject(i);
                         if (!promptIds.add(prompt.getString("id")) || prompt.getString("name").trim().isEmpty() || prompt.getString("content").getBytes(StandardCharsets.UTF_8).length > TreeAccess.MAX_CONFIG) throw new AppFailure("invalid_prompt", "提示词结构或大小无效。");
                     }
-                    JSONObject promptData = repository.copy(); promptData.put("prompts", prompts); repository.replace(promptData);
+                    core.call("savePrompts",args);
                     result = state(); break;
+                case "togglePrompt":
+                    core.call("togglePrompt",args);result=new JSONObject().put("state",state()).put("saved",true).put("runtimeConfirmed",false);break;
                 case "catalog": result = new DocumentCatalog(tree()).catalog(args.getString("kind")); break;
                 case "readDocument": result = new DocumentCatalog(tree()).document(args.getString("path")); break;
                 case "readDocumentRevision": result = new JSONObject().put("hash", TransactionEngine.hash(tree().port(args.getString("path")).read())); break;
@@ -243,17 +268,15 @@ public final class MainActivity extends Activity {
                 case "saveDocument": result = new DocumentStore(tree(), repository).save(args); break;
                 case "restoreDocument": result = new DocumentStore(tree(), repository).restore(args); break;
                 case "editMcp":
-                    TreeAccess mcpAccess = tree();
-                    JSONObject mcpData = repository.copy();
-                    if (mcpData.getJSONObject("journals").has(mcpAccess.tree.toString())) throw new AppFailure("pending_recovery", "请先恢复未确认的配置写入。");
-                    JSONObject mcpOwnership = mcpData.getJSONObject("ownership").optJSONObject(mcpAccess.tree.toString());
-                    byte[] mcpConfig = args.getString("config").getBytes(StandardCharsets.UTF_8);
-                    if (mcpConfig.length > TreeAccess.MAX_CONFIG) throw new AppFailure("too_large", "配置超过 2 MB 限制。");
-                    writeConfig(mcpAccess, mcpConfig, args.getString("expectedRevision"), mcpOwnership == null ? new JSONObject() : mcpOwnership, "mcp", "修改 MCP 配置");
-                    result = new JSONObject().put("state", state()).put("snapshot", snapshot(mcpAccess)); break;
+                    rememberBackup("修改 MCP 配置");
+                    if(args.has("entries")){
+                        JSONArray entries=args.getJSONArray("entries");
+                        for(int i=0;i<entries.length();i++)core.call("upsertMcp",entries.getJSONObject(i));
+                    }else core.call(args.isNull("value")?"removeMcp":"upsertMcp",args);
+                    result = new JSONObject().put("state", state()).put("fileSaved", true).put("runtimeConfirmed", false); break;
                 case "apply": result = apply(args); break;
-                case "restore": result = restore(args, false); break;
-                case "recover": result = restore(args, true); break;
+                case "restore": result = restore(args); break;
+                case "recover": core.call("recover", new JSONObject()); result = new JSONObject().put("state",state()).put("fileSaved",true).put("runtimeConfirmed",false); break;
                 default: throw new AppFailure("unknown_method", "不支持此操作。");
             }
             success(call, result);
@@ -266,14 +289,20 @@ public final class MainActivity extends Activity {
     }
     private JSONObject snapshot(TreeAccess access) throws Exception {
         byte[] config = access.read();
-        byte[] auth = access.auth();
+        byte[] auth = null;
+        boolean authReadable = true;
+        try { auth = access.auth(); } catch (Exception unreadable) { authReadable = false; }
         JSONObject data = repository.copy();
         JSONObject ownership = data.optJSONObject("ownership");
         return new JSONObject().put("config", config == null ? JSONObject.NULL : TreeAccess.utf8(config))
             .put("auth", auth == null ? JSONObject.NULL : TreeAccess.utf8(auth))
+            .put("authReadable", authReadable)
             .put("revision", TransactionEngine.revision(config, auth)).put("directory", access.info())
             .put("ownership", ownership == null ? JSONObject.NULL : ownership.opt(access.tree.toString()))
-            .put("filteredRoutes",FilterService.routes(this));
+            .put("loginStash", data.getJSONObject("loginStashes").opt(access.tree.toString()))
+            .put("providers", nativeState().getJSONArray("providers")).put("currentProviderId", nativeState().opt("currentProviderId"))
+            .put("nativeMatches",core.call("get_current_matches",new JSONObject()))
+            .put("filteredRoutes",repository.copy().optJSONObject("filterRoutes"));
     }
     private JSONObject state() throws Exception {
         JSONObject data = repository.copy();
@@ -294,6 +323,8 @@ public final class MainActivity extends Activity {
             item.remove("config");
             item.remove("configBase64");
             item.remove("ownership");
+            item.remove("authBase64");
+            item.remove("loginStash");
             backups.put(item);
         }
         JSONArray documentBackups = new JSONArray();
@@ -309,186 +340,62 @@ public final class MainActivity extends Activity {
         }
         JSONObject settings = data.getJSONObject("settings");
         updateBars(settings.optString("theme", "system"));
-        return new JSONObject().put("providers", data.getJSONArray("providers")).put("backups", backups)
+        JSONObject upstream = nativeState();
+        return new JSONObject().put("providers", upstream.getJSONArray("providers")).put("backups", backups)
             .put("directory", directory == null ? JSONObject.NULL : directory).put("settings", settings).put("native", true)
-            .put("pendingRecovery", data.getJSONObject("journals").has(uri))
-            .put("lastApplied", data.opt("lastApplied")).put("providerInitialization", data.optInt("providerInitialization", 0))
-            .put("currentProviderId", data.opt("currentProviderId")).put("prompts", data.getJSONArray("prompts"))
+            .put("pendingRecovery", upstream.optBoolean("pendingRecovery"))
+            .put("mode",upstream.opt("mode")).put("backendVersion",upstream.opt("backendVersion"))
+            .put("lastApplied", data.opt("lastApplied")).put("providerInitialization", upstream.optBoolean("providerInitialization")?1:0)
+            .put("startupError",core.startupError())
+            .put("currentProviderId", upstream.opt("currentProviderId")).put("prompts", upstream.getJSONArray("prompts"))
             .put("documentBackups", documentBackups).put("pendingDocuments", pendingDocuments);
     }
 
-    /** Same order as desktop: import live only when empty, then seed the official
-     * card once. This writes only the local vault, never the Codex directory. */
+    private JSONObject nativeState() throws Exception {
+        if (core == null) throw new AppFailure("native_unavailable", "原生后端尚未就绪。");
+        return (JSONObject)core.call("bootstrap", new JSONObject());
+    }
     private Object initializeProviders(JSONObject args) throws Exception {
-        JSONObject data = repository.copy();
-        if (data.optInt("providerInitialization", 0) == 1) return state();
-        TreeAccess access = tree();
-        JSONObject live = snapshot(access);
-        if (!live.getString("revision").equals(args.getString("expectedRevision")))
-            throw new AppFailure("conflict", "初始化期间 Codex 配置已改变，请刷新后重试；没有写入 Codex 文件。");
-        JSONObject updated = ProviderInitialization.initialize(data, args);
-        String imported = args.optString("importedId");
-        if (!imported.isEmpty()) updated.put("currentProviderId", imported);
-        else if (!updated.has("currentProviderId")) {
-            JSONObject last = data.optJSONObject("lastApplied");
-            String previousId = last == null ? "" : last.optString("id");
-            JSONArray rows = data.getJSONArray("providers");
-            for (int i = 0; i < rows.length(); i++) {
-                if (rows.getJSONObject(i).optString("id").equals(previousId))
-                    updated.put("currentProviderId", previousId);
-            }
-        }
-        repository.replace(updated);
+        core.call("initializeProviders", args);
         return state();
     }
-
-    /** Desktop editor save: row fields and intentional live edits. Keep the row
-     * if a publication is uncertain; revert local rows if nothing was written. */
     private Object saveProviderEditor(JSONObject args) throws Exception {
-        TreeAccess access = tree();
-        JSONObject before = repository.copy();
-        String uri = access.tree.toString();
-        if (before.getJSONObject("journals").has(uri))
-            throw new AppFailure("pending_recovery", "请先恢复未确认的配置写入。");
-        JSONArray providers = args.getJSONArray("providers");
-        Set<String> ids = new HashSet<>();
-        if (providers.length() > 200) throw new AppFailure("profile_limit", "最多保留 200 个服务商方案。");
-        for (int i = 0; i < providers.length(); i++) {
-            JSONObject item = providers.getJSONObject(i);
-            if (!ids.add(item.getString("id")) || item.getString("name").trim().isEmpty()
-                    || item.getJSONObject("settingsConfig").getString("config").length() > TreeAccess.MAX_CONFIG)
-                throw new AppFailure("invalid_profile", "方案结构、大小或标识不正确，没有保存。");
-        }
-        byte[] config = args.getString("config").getBytes(StandardCharsets.UTF_8);
-        if (config.length > TreeAccess.MAX_CONFIG) throw new AppFailure("too_large", "配置超过 2 MB 限制。");
-        if (!snapshot(access).getString("revision").equals(args.getString("expectedRevision")))
-            throw new AppFailure("conflict", "配置或认证文件已改变，请重新保存；没有覆盖外部修改。");
-        byte[] originalConfig = access.read();
-        JSONObject next = repository.copy();
-        next.put("providers", providers);
-        repository.replace(next);
-        try {
-            if (args.optBoolean("applyProvider")) {
-                return apply(args);
-            }
-            JSONObject owned = before.getJSONObject("ownership").optJSONObject(uri);
-            writeConfig(access, config, args.getString("expectedRevision"), owned == null ? new JSONObject() : owned,
-                "mcp", "供应商编辑器 · 修改全局设置");
-            return new JSONObject().put("state", state()).put("snapshot", snapshot(access))
-                .put("fileVerified", true).put("runtimeConfirmed", false);
-        } catch (Exception failure) {
-            JSONObject result = repository.copy();
-            boolean untouched = false;
-            try { untouched = Arrays.equals(originalConfig, access.read()); } catch (Exception ignored) { }
-            if (!result.getJSONObject("journals").has(uri) && untouched) {
-                result.put("providers", before.getJSONArray("providers"));
-                repository.replace(result);
-            }
-            throw failure;
-        }
+        // Compatibility bridge for older frontend calls. New UI sends the
+        // complete upstream EditorSave context, without TypeScript file plans.
+        throw new AppFailure("editor_reload", "请重新打开供应商编辑器后保存。");
     }
-
     private Object apply(JSONObject args) throws Exception {
-        TreeAccess access = tree();
-        if (repository.copy().getJSONObject("journals").has(access.tree.toString())) throw new AppFailure("pending_recovery", "此目录有未确认的写入，请先在“备份”中恢复写入前的配置。");
-        String config = args.getString("config");
-        if (config.getBytes(StandardCharsets.UTF_8).length > TreeAccess.MAX_CONFIG) throw new AppFailure("too_large", "配置超过 2 MB 限制。");
-        String providerId = args.getString("providerId");
-        JSONArray providers = repository.copy().getJSONArray("providers");
-        JSONObject selected = null;
-        for (int i = 0; i < providers.length(); i++) if (providers.getJSONObject(i).getString("id").equals(providerId)) selected = providers.getJSONObject(i);
-        if (selected == null) throw new AppFailure("missing_profile", "方案已被删除，请刷新后重试。");
-        JSONObject catalog=args.optJSONObject("catalog");
-        if(catalog!=null){String name=catalog.getString("name");if(!name.matches("cc-switch-model-catalog-[a-f0-9]{1,16}\\.json"))throw new AppFailure("invalid_catalog","模型目录文件名无效。");byte[] contents=catalog.getString("text").getBytes(StandardCharsets.UTF_8);new JSONObject(catalog.getString("text")).getJSONArray("models");TransactionEngine.Port port=access.port(name);byte[] prior=port.read();if(prior!=null&&!Arrays.equals(prior,contents))throw new AppFailure("catalog_conflict","模型目录已被外部修改，本次未覆盖。");if(prior==null)port.write(contents);if(!Arrays.equals(contents,port.read()))throw new AppFailure("catalog_write_failed","模型目录写入后核验失败，未修改配置。");}
-        writeConfig(access, config.getBytes(StandardCharsets.UTF_8), args.getString("expectedRevision"),
-            args.getJSONObject("ownership"), providerId, "应用 · " + selected.getString("name"));
-        return new JSONObject().put("state", state()).put("snapshot", snapshot(access)).put("fileVerified", true).put("runtimeConfirmed", false);
+        tree();
+        rememberBackup("切换供应商");
+        core.call("switch_provider",new JSONObject().put("id",args.getString("providerId")));
+        return new JSONObject().put("state",state()).put("fileSaved",true).put("runtimeConfirmed",false);
     }
-
-    private Object restore(JSONObject args, boolean recover) throws Exception {
-        TreeAccess access = tree();
-        JSONObject data = repository.copy();
-        JSONObject backup = null;
-        if (recover) {
-            JSONObject journal = data.getJSONObject("journals").optJSONObject(access.tree.toString());
-            if (journal != null) backup = journal.getJSONObject("before");
-        } else {
-            JSONArray backups = data.getJSONArray("backups");
-            for (int i = 0; i < backups.length(); i++) if (backups.getJSONObject(i).getString("id").equals(args.getString("id"))) backup = backups.getJSONObject(i);
-        }
-        if (backup == null) throw new AppFailure("missing_backup", "备份已不存在或已被轮换删除。");
-        if (!access.tree.toString().equals(backup.getString("treeUri"))) throw new AppFailure("wrong_directory", "该备份属于另一个目录。请先重新授权备份对应的目录，避免覆盖当前目录。");
-        byte[] target = backup.has("configBase64")
-            ? (backup.isNull("configBase64") ? null : Base64.getDecoder().decode(backup.getString("configBase64")))
-            : (backup.isNull("config") ? null : backup.getString("config").getBytes(StandardCharsets.UTF_8));
-        JSONObject ownership = backup.optJSONObject("ownership");
-        writeConfig(access, target, args.getString("expectedRevision"), ownership == null ? new JSONObject() : ownership, "restored", "恢复 · 写入前配置");
-        return new JSONObject().put("state", state()).put("snapshot", snapshot(access)).put("fileVerified", true).put("runtimeConfirmed", false);
+    private Object restore(JSONObject args) throws Exception {
+        TreeAccess access=tree();
+        JSONArray backups=repository.copy().getJSONArray("backups");
+        JSONObject backup=null;
+        for(int i=0;i<backups.length();i++)if(backups.getJSONObject(i).getString("id").equals(args.getString("id")))backup=backups.getJSONObject(i);
+        if(backup==null)throw new AppFailure("missing_backup","备份已不存在。");
+        if(!access.tree.toString().equals(backup.getString("treeUri")))throw new AppFailure("wrong_directory","该备份属于另一个已授权目录。");
+        rememberBackup("恢复配置与认证");
+        core.call("restoreFiles",backup);
+        return new JSONObject().put("state",state()).put("fileSaved",true).put("runtimeConfirmed",false);
     }
-
-    private void writeConfig(TreeAccess access, byte[] target, String expectedRevision, JSONObject ownership, String providerId, String reason) throws Exception {
-        byte[] before = access.read();
-        byte[] auth = access.auth();
-        if (!TransactionEngine.revision(before, auth).equals(expectedRevision)) throw new AppFailure("conflict", "配置或认证文件已在外部改变。请刷新后重试；没有覆盖外部修改。");
-        String uri = access.tree.toString();
-        String name = access.info().getString("name");
-        JSONObject pending = repository.copy().getJSONObject("journals").optJSONObject(uri);
-        boolean[] committed = { false };
-        TransactionEngine.Port guarded = new TransactionEngine.Port() {
-            private void checkAuth() throws Exception {
-                if (!Arrays.equals(auth, access.auth())) throw new AppFailure("auth_conflict", "认证文件在写入前发生变化，请刷新后重试。没有覆盖认证文件。");
-            }
-            @Override public byte[] read() throws Exception { return access.read(); }
-            @Override public void write(byte[] bytes) throws Exception { checkAuth(); access.write(bytes); }
-            @Override public void delete() throws Exception { checkAuth(); access.delete(); }
-        };
-        TransactionEngine.apply(guarded, TransactionEngine.hash(before), target, new TransactionEngine.Journal() {
-            @Override public void prepare(byte[] original, byte[] after) throws Exception {
-                JSONObject data = repository.copy();
-                JSONObject backup = new JSONObject().put("id", UUID.randomUUID().toString()).put("createdAt", System.currentTimeMillis())
-                    .put("reason", reason).put("directoryName", name).put("treeUri", uri).put("existed", original != null)
-                    .put("configBase64", original == null ? JSONObject.NULL : Base64.getEncoder().encodeToString(original))
-                    .put("ownership", data.getJSONObject("ownership").opt(uri));
-                JSONArray old = data.getJSONArray("backups");
-                JSONArray retained = new JSONArray();
-                for (int i = Math.max(0, old.length() - 9); i < old.length(); i++) retained.put(old.get(i));
-                retained.put(backup);
-                data.put("backups", retained);
-                // Keep the original recovery point if recovery itself fails.
-                if (pending == null) data.getJSONObject("journals").put(uri, new JSONObject().put("before", backup).put("targetHash", TransactionEngine.hash(after)));
-                repository.replace(data);
-            }
-            @Override public void finish(boolean saved) throws Exception {
-                JSONObject data = repository.copy();
-                if (saved) {
-                    if (!Arrays.equals(target, access.read())) throw new AppFailure("conflict", "文件在核验后发生改变。已保留恢复备份，请刷新后检查。");
-                    data.getJSONObject("journals").remove(uri);
-                    recordApplied(data, uri, ownership, providerId, access);
-                    committed[0] = true;
-                } else if (pending == null) {
-                    data.getJSONObject("journals").remove(uri);
-                }
-                repository.replace(data);
-            }
-        });
-        if (!committed[0]) {
-            JSONObject data = repository.copy();
-            // An explicit recovery may target bytes already present. Resolve its
-            // pending journal only after verifying the no-op result as well.
-            if (!Arrays.equals(target, access.read())) throw new AppFailure("conflict", "文件在核验后发生改变，请刷新后检查。");
-            data.getJSONObject("journals").remove(uri);
-            recordApplied(data, uri, ownership, providerId, access);
-            repository.replace(data);
-        }
-    }
-    private void recordApplied(JSONObject data, String uri, JSONObject ownership, String providerId, TreeAccess access) throws Exception {
-        data.getJSONObject("ownership").put(uri, ownership);
-        if (!providerId.isEmpty() && !providerId.equals("mcp")) {
-            if (providerId.equals("restored")) data.remove("currentProviderId");
-            else data.put("currentProviderId", providerId);
-        }
-        data.put("lastApplied", new JSONObject().put("id", providerId).put("time", System.currentTimeMillis())
-            .put("treeUri", uri).put("revision", TransactionEngine.revision(access.read(), access.auth())));
+    private void rememberBackup(String reason) throws Exception {
+        TreeAccess access=tree();
+        byte[] config=access.read();
+        byte[] auth=null;
+        boolean authReadable=true;
+        try { auth=access.auth(); } catch (Exception ignored) { authReadable=false; }
+        JSONObject data=repository.copy();
+        JSONObject backup=new JSONObject().put("id",UUID.randomUUID().toString()).put("createdAt",System.currentTimeMillis())
+            .put("reason",reason).put("directoryName",access.info().getString("name")).put("treeUri",access.tree.toString())
+            .put("existed",config!=null)
+            .put("configBase64",config==null?JSONObject.NULL:Base64.getEncoder().encodeToString(config));
+        if(authReadable)backup.put("authBase64",auth==null?JSONObject.NULL:Base64.getEncoder().encodeToString(auth));
+        JSONArray prior=data.getJSONArray("backups"),retained=new JSONArray();
+        for(int i=Math.max(0,prior.length()-9);i<prior.length();i++)retained.put(prior.get(i));
+        retained.put(backup);data.put("backups",retained);repository.replace(data);
     }
 
     private void launchPicker(Call call, int type, String payload) {
@@ -536,10 +443,16 @@ public final class MainActivity extends Activity {
                         throw new AppFailure("wrong_codex_root", "请选择 Codex 提供的整个 .codex 目录，不能选择它下面的子目录。");
                     }
                     String previousUri = preferences.getString("uri", "");
+                    if(!previousUri.equals(uri.toString())){
+                        RouterService.stop(this);core.call("suspendDocuments",new JSONObject());
+                    }
                     if (!preferences.edit().putString("uri", uri.toString()).putString("name", info.getString("name")).commit()) throw new AppFailure("preferences_write", "无法保存持久目录授权。");
+                    core.bind(uri.toString());
+                    core.startup();
                     if (!previousUri.isEmpty() && !previousUri.equals(uri.toString())) {
                         try { getContentResolver().releasePersistableUriPermission(Uri.parse(previousUri), GRANTS); } catch (SecurityException ignored) { }
                     }
+                    core.call("initializeProviders",new JSONObject());
                     output = state();
                 } else if (request == IMPORT_PICKER) {
                     output = new JSONObject().put("text", TreeAccess.utf8(TreeAccess.readUri(getContentResolver(), uri, 16 * 1024 * 1024)));
@@ -547,8 +460,7 @@ public final class MainActivity extends Activity {
                     if (exportPayload == null) throw new AppFailure("export_lost", "导出内容已失效，请重试。");
                     byte[] bytes = exportPayload.getBytes(StandardCharsets.UTF_8);
                     TreeAccess.writeUri(getContentResolver(), uri, bytes);
-                    if (!Arrays.equals(bytes, TreeAccess.readUri(getContentResolver(), uri, 16 * 1024 * 1024))) throw new AppFailure("export_unconfirmed", "导出文件读回不一致，未确认导出成功。");
-                    output = new JSONObject().put("verified", true);
+                    output = new JSONObject().put("saved", true);
                 }
                 success(call, output);
             } catch (Exception error) { failure(call, error); }
@@ -599,6 +511,7 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed() { handleBack(); }
     @Override protected void onDestroy() {
         destroyed = true;
+        if(core!=null&&coreEvents!=null)core.clearEvents(coreEvents);
         io.shutdown();
         if (web != null) { root.removeView(web); web.destroy(); }
         super.onDestroy();

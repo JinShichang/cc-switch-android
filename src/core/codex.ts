@@ -1,10 +1,16 @@
-// Port of CC Switch's CodexProjection / floor / requires_openai_auth rules.
-// Upstream: fc3eb797c72e054d554eea6a2e7a8b93933c6ac5 (MIT, Jason Young).
-// Android intentionally leaves auth.json and the guest/host keyring untouched.
+// Read-only UI summaries, validation and portable provider import/export.
+// All native mutations and provider editor projections use the upstream Rust backend.
+// Upstream: aaf6ee963927ea0173e53ac00c1919840948ab22, 4.0.40 (MIT, Jason Young).
+// File authentication follows upstream; system keyrings remain Codex-owned.
 import { modelCatalog } from "./modelCatalog.ts";
 import { stringify } from "smol-toml";
 import { getCodexCustomTemplate } from "../upstream/codexTemplates.ts";
 import { normalizeTomlText } from "../upstream/textNormalization.ts";
+import {
+  authApiKey,
+  hasOpenAIAccount,
+  parseAuth,
+} from "../upstream/codexLogin.ts";
 import {
   assertOnlyOwnedChanges,
   canonical,
@@ -14,9 +20,7 @@ import {
 } from "./tomlPatch.ts";
 import {
   ConfigError,
-  type ApplyPlan,
   type AuthKind,
-  type Ownership,
   type Provider,
   type Snapshot,
   type TomlObject,
@@ -41,7 +45,6 @@ const EXCLUSIVE = [
   "model_auto_compact_token_limit",
   "model_supports_reasoning_summaries",
   "model_verbosity",
-  "model_catalog_json",
 ];
 const NESTED = [
   "agents.default_subagent_model",
@@ -77,24 +80,11 @@ function bad(code: string, message: string): never {
 }
 
 export function authStatus(authText: string | null, config: TomlObject) {
-  let auth: TomlObject = {};
-  if (authText !== null) {
-    try {
-      auth = JSON.parse(authText.replace(/^\uFEFF/, ""));
-      if (!object(auth)) throw new Error();
-    } catch {
-      bad(
-        "invalid_auth",
-        "auth.json 格式错误。已停止应用配置，原文件保持不变；请先在 Codex 中检查认证文件。",
-      );
-    }
-  }
-  const mode = string(config.cli_auth_credentials_store) || "file";
-  const fileLogin = !!(
-    string(auth.OPENAI_API_KEY).trim() ||
-    string(auth.tokens?.access_token).trim() ||
-    string(auth.tokens?.refresh_token).trim()
-  );
+  const parsed = parseAuth(authText);
+  const auth = object(parsed.value) ? parsed.value : {};
+  const declared = string(config.cli_auth_credentials_store);
+  const mode = !declared ? "file" : ["file", "keyring", "auto", "ephemeral"].includes(declared) ? declared : "unknown";
+  const fileLogin = hasOpenAIAccount(auth);
   const keyring = mode === "keyring" || mode === "auto";
   return {
     mode,
@@ -106,6 +96,7 @@ export function authStatus(authText: string | null, config: TomlObject) {
         ? "登录可能保存在钥匙串，目录权限无法读取"
         : "auth.json 中未发现登录材料",
     auth,
+    valid: parsed.valid,
   };
 }
 
@@ -115,6 +106,17 @@ export interface Projection {
   top: TomlObject;
   extra: TomlObject;
   authKind: AuthKind;
+  routeKind?: "custom" | "builtin" | "default" | "official";
+  builtInId?: string;
+  routeAuth?: "bearer" | "env" | "headers" | "none";
+}
+
+const RESERVED_IDS = ["openai", "ollama", "lmstudio"];
+const BUILTIN_IDS = [...RESERVED_IDS, "amazon-bedrock", "amazon-bedrock-runtime"];
+const DORMANT_URL = "http://127.0.0.1:18181/v1";
+const PROXY_PLACEHOLDER = "PROXY_MANAGED";
+function managedCatalogPointer(value: unknown) {
+  return typeof value === "string" && /(?:^|[\\/])cc-switch-model-catalog(?:-[a-f0-9]{1,16})?\.json$/.test(value.trim());
 }
 
 function selectedTable(doc: TomlObject): TomlObject | undefined {
@@ -206,98 +208,57 @@ export function projection(
   strict = true,
 ): Projection {
   const doc = parseConfig(provider.settingsConfig.config, "服务商 TOML");
-  validateRelatedFields(doc);
   const official = provider.authKind === "official";
   const top: TomlObject = {};
   const extra: TomlObject = {};
   for (const key of FLOOR) if (Object.hasOwn(doc, key)) top[key] = doc[key];
+  if (doc.model_catalog_json !== undefined && !managedCatalogPointer(doc.model_catalog_json)) top.model_catalog_json = doc.model_catalog_json;
   for (const key of [...EXCLUSIVE, ...NESTED]) {
     const value = getPath(doc, key.split("."));
     if (value !== undefined) extra[key] = value;
   }
   if (official)
-    return { official, route: null, top, extra, authKind: "official" };
-  if (strict && !string(doc.model).trim())
-    bad("missing_model", "请填写模型名称后再应用。");
+    return { official, route: null, top, extra, authKind: "official", routeKind: "official" };
+  const selector = string(doc.model_provider).trim();
   let source = selectedTable(doc);
+  if (selector && !BUILTIN_IDS.includes(selector) && !source)
+    bad("missing_provider_table", "配置选择了 model_provider，但没有对应的 model_providers 表。");
+  if (RESERVED_IDS.includes(selector) && source) source = { ...source, wire_api: "responses" };
   if (!source) {
-    const legacyUrl = string(doc.openai_base_url) || string(doc.base_url);
+    const legacyUrl = (!selector || selector === "openai") ? string(doc.openai_base_url) || (!selector ? string(doc.base_url) : "") : "";
     if (legacyUrl) source = { base_url: legacyUrl, wire_api: "responses" };
-    else
-      bad(
-        "missing_provider_table",
-        "配置中找不到已选服务商表，请检查 model_provider 和 model_providers。",
-      );
+    else if (selector && selector !== "openai" && BUILTIN_IDS.includes(selector))
+      return { official: false, route: null, top, extra, authKind: provider.authKind, routeKind: "builtin", builtInId: selector };
+    else if (selector === "openai")
+      bad("missing_provider_table", "第三方配置需要自定义 model_providers 表；未改道的 openai 应使用官方供应商。");
+    else if (!Object.keys(doc).length && authApiKey(provider.settingsConfig.auth))
+      bad("missing_provider_table", "第三方供应商缺少 config.toml，无法写入 bearer token。");
+    else return { official: false, route: null, top, extra, authKind: provider.authKind, routeKind: "default" };
   }
   const route = { ...source };
-  route.name = string(source.name) || provider.name;
-  route.wire_api = string(source.wire_api) || "responses";
-  if (route.wire_api !== "responses")
-    bad(
-      "proxy_required",
-      "此配置需要 Chat Completions/Anthropic 协议转换。首版只支持原生 Responses 服务，尚未包含上游本地代理。",
-    );
-  if (source.auth || source.aws)
-    bad(
-      "external_auth",
-      "此配置依赖外部认证命令或 AWS 凭据。首版无法管理该认证来源，请使用 API Key、环境变量或已有官方登录。",
-    );
-  const base = string(source.base_url).trim();
-  if (strict || base) route.base_url = checkUrl(base);
-  else route.base_url = "";
-  for (const key of [
-    "request_max_retries",
-    "stream_max_retries",
-    "stream_idle_timeout_ms",
-  ]) {
-    if (
-      route[key] !== undefined &&
-      (!Number.isSafeInteger(route[key]) || route[key] < 0)
-    )
-      bad("invalid_number", `${key} 必须是非负整数。`);
-  }
-  if (provider.authKind === "apiKey") {
+  route.name = string(source.name).trim() || selector || "Custom";
+  let routeAuth: NonNullable<Projection["routeAuth"]>;
+  const headersAuth = (value: unknown) => object(value) && Object.keys(value).some(key => key.toLowerCase() === "authorization");
+  if (Object.hasOwn(source, "env_key")) routeAuth = "env";
+  else if (Object.hasOwn(source, "auth") || Object.hasOwn(source, "aws") ||
+    (!source.requires_openai_auth && (headersAuth(source.http_headers) || headersAuth(source.env_http_headers)))) routeAuth = "headers";
+  else {
     const key = (
       string(provider.settingsConfig.auth.OPENAI_API_KEY) ||
       string(source.experimental_bearer_token) ||
       string(doc.experimental_bearer_token)
     ).trim();
-    if (strict && !key)
+    if (strict && !key && (source.requires_openai_auth || (doc.openai_base_url && !doc.model_providers)))
       bad(
         "missing_key",
-        "该方案缺少 API Key。请编辑后再应用；不会回退使用 Codex 的官方登录凭据。",
+        "该方案缺少 API Key，而 requires_openai_auth 或 openai_base_url 会回退使用官方登录。请填写 Key 或移除回退指令。",
       );
-    if (/[\x00-\x1f\x7f]/.test(key))
-      bad("invalid_key", "API Key 不能包含换行或控制字符。");
-    delete route.env_key;
-    delete route.env_key_instructions;
-    route.experimental_bearer_token = key;
-  } else if (provider.authKind === "env") {
-    if (strict && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(string(route.env_key)))
-      bad(
-        "invalid_env_key",
-        "请填写 Codex 进程已有的环境变量名称，例如 CODEX_API_KEY。",
-      );
-    delete route.experimental_bearer_token;
-  } else {
-    delete route.env_key;
-    delete route.env_key_instructions;
-    delete route.experimental_bearer_token;
-    if (
-      object(route.http_headers) &&
-      Object.keys(route.http_headers).some(
-        (k) => k.toLowerCase() === "authorization",
-      )
-    )
-      bad(
-        "auth_kind_mismatch",
-        "该方案声明了 Authorization 请求头，不能按无认证方案应用。请改为 API Key 配置。",
-      );
+    if (key) { route.experimental_bearer_token = key; routeAuth = "bearer"; }
+    else routeAuth = Object.hasOwn(route, "query_params") || headersAuth(route.http_headers) || headersAuth(route.env_http_headers) ? "headers" : "none";
   }
-  const ownCredential =
-    provider.authKind === "apiKey" || provider.authKind === "env";
-  route.requires_openai_auth = ownCredential && !!liveAuth?.fileLogin;
-  return { official, route, top, extra, authKind: provider.authKind };
+  if (routeAuth === "bearer" || routeAuth === "env") route.requires_openai_auth = !!liveAuth?.fileLogin;
+  else delete route.requires_openai_auth;
+  return { official, route, top, extra, authKind: provider.authKind, routeKind: "custom", routeAuth };
 }
 
 export function validateProvider(value: unknown): Provider {
@@ -323,6 +284,7 @@ export function validateProvider(value: unknown): Provider {
     authKind = official ? "official" : table?.env_key ? "env" : "apiKey";
   }
   const result: Provider = {
+    ...structuredClone(value),
     id: /^[A-Za-z0-9_-]{1,100}$/.test(string(value.id))
       ? value.id
       : crypto.randomUUID(),
@@ -354,6 +316,7 @@ export function validateProvider(value: unknown): Provider {
   };
   // Remove the obsolete Android-only selector from older saves and imports.
   delete result.meta?.androidLoginPolicy;
+  delete result.meta?.preserveCodexOfficialAuthOnSwitch;
   if (result.settingsConfig.modelCatalog) {
     const models = result.settingsConfig.modelCatalog.models;
     if (
@@ -374,7 +337,6 @@ export function validateProvider(value: unknown): Provider {
     modelCatalog(result);
   }
   // Preserve format metadata; protocol compatibility is checked when applying.
-  projection(result, undefined, false);
   return result;
 }
 
@@ -393,68 +355,9 @@ export function newProvider(kind: AuthKind = "apiKey"): Provider {
 }
 
 /** Startup import then official seed, following provider/live.rs and
- * database/dao/providers_seed.rs. Authentication tokens stay with Codex. */
-export function initialProviderSetup(
-  state: Pick<
-    import("./types.ts").AppState,
-    "providers" | "providerInitialization"
-  >,
-  snapshot: Snapshot,
-) {
-  if (state.providerInitialization === 1)
-    return {
-      additions: [] as Provider[],
-      warnings: [] as string[],
-      importedId: undefined as string | undefined,
-    };
-  const additions: Provider[] = [],
-    warnings: string[] = [];
-  let importedId: string | undefined;
-  if (
-    !state.providers.length &&
-    (snapshot.config !== null || snapshot.auth !== null)
-  ) {
-    try {
-      const source = snapshot.config ?? "";
-      const doc = parseConfig(source);
-      const route = selectedTable(doc);
-      if (
-        source.includes("PROXY_MANAGED") ||
-        /^http:\/\/127\.0\.0\.1:18181\/r\//.test(string(route?.base_url))
-      )
-        bad(
-          "proxy_import",
-          "当前配置由本机中转接管，不能把中转地址导入为 default。请先恢复原供应商配置。",
-        );
-      const imported = captureCurrent(snapshot, "default");
-      imported.id = "default";
-      // Preserve the entire original TOML in the imported row, just like desktop.
-      // The editor projection and switch retain ownership of unrelated live keys.
-      imported.settingsConfig.config = source;
-      additions.push(validateProvider(imported));
-      importedId = imported.id;
-    } catch (error) {
-      warnings.push(
-        "未自动导入 default：" +
-          (error instanceof Error ? error.message : String(error)),
-      );
-    }
-  }
-  if (!state.providers.some((p) => p.id === "codex-official")) {
-    const official = newProvider("official");
-    official.id = "codex-official";
-    official.name = "OpenAI Official";
-    official.icon = "openai";
-    official.iconColor = "#00A67E";
-    official.websiteUrl = "https://chatgpt.com/codex";
-    additions.push(official);
-  }
-  return { additions, warnings, importedId };
-}
-
+ * database/dao/providers_seed.rs. Native auth snapshots stay device-encrypted. */
 export function readSummary(snapshot: Snapshot) {
   const doc = parseConfig(snapshot.config ?? "");
-  validateRelatedFields(doc);
   const auth = authStatus(snapshot.auth, doc);
   const table = selectedTable(doc);
   return {
@@ -469,307 +372,6 @@ export function readSummary(snapshot: Snapshot) {
     hasBearer: !!string(table?.experimental_bearer_token),
     custom: !!doc.model_provider && doc.model_provider !== "openai",
   };
-}
-
-export function planApply(snapshot: Snapshot, provider: Provider): ApplyPlan {
-  if (
-    provider.meta?.apiFormat &&
-    !["responses", "openai_responses"].includes(provider.meta.apiFormat)
-  )
-    bad(
-      "proxy_required",
-      "此配置需要协议转换；Android 本机过滤服务目前只支持原生 Responses，已保留设置但未应用。",
-    );
-  const source = snapshot.config ?? "";
-  const summary = readSummary(snapshot);
-  const target = projection(provider, summary.auth);
-  if (!provider.historyFilter && provider.meta?.isFullUrl)
-    bad(
-      "proxy_required",
-      "完整 URL 需要本机路由；请启用历史过滤中转，或关闭完整 URL 并填写基础地址。",
-    );
-  const catalog = modelCatalog(provider);
-  if (catalog) target.extra.model_catalog_json = catalog.name;
-  const warnings: string[] = [];
-  if (
-    !provider.historyFilter &&
-    (provider.meta?.customUserAgent ||
-      Object.keys(provider.meta?.localProxyRequestOverrides?.headers ?? {})
-        .length ||
-      Object.keys(provider.meta?.localProxyRequestOverrides?.body ?? {}).length)
-  )
-    warnings.push(
-      "当前为直连：本地代理 User-Agent 与请求覆盖仅保存于方案，未应用到请求。",
-    );
-  if (provider.meta?.autoSelect)
-    warnings.push(
-      "Android 未启用后台自动测速切换，请使用管理与测速手动选择地址。",
-    );
-  if (summary.auth.keyring)
-    warnings.push("钥匙串状态无法通过 SAF 确认；没有改动钥匙串或 auth.json。");
-  if (target.official && !summary.auth.fileLogin)
-    warnings.push(
-      "仅切回 Codex 官方配置。登录状态需要在 Codex 内确认，必要时重新登录。",
-    );
-  if (provider.authKind === "env")
-    warnings.push(
-      "CC Switch 无法设置或验证 Codex 进程的环境变量，请在 Codex 宿主确认该变量已注入。",
-    );
-  if (provider.historyFilter)
-    warnings.push(
-      "此方案将通过 CC Switch 本机中转。保持 CC Switch 后台运行；退出、强制停止或端口不可达会中断请求。远程加密压缩不可用。",
-    );
-  if (target.route?.base_url?.startsWith("http:"))
-    warnings.push(
-      "此服务使用 HTTP 明文连接；请确认这是你预期的本地或受信任服务。",
-    );
-  if (summary.doc.profile)
-    warnings.push(
-      "当前配置选择了 profile；配置档、项目配置或启动参数可能覆盖本次设置，请在 Codex 中核对最终生效值。",
-    );
-  if (catalog)
-    warnings.push(
-      "已生成所选模型目录，需完整重启 Codex 才能重新加载模型列表。",
-    );
-  else if (summary.doc.model_catalog_json)
-    warnings.push("当前没有配置模型列表，将保留非本应用管理的模型目录指针。");
-  // Codex rejects reserved provider tables. Leave them intact and report the
-  // incompatibility instead of deleting a user's unrelated provider definitions.
-  if (
-    ["openai", "ollama", "lmstudio"].some(
-      (id) => summary.doc.model_providers?.[id],
-    )
-  ) {
-    bad(
-      "reserved_table",
-      "当前文件含 Codex 保留名称的 model_providers 表（openai/ollama/lmstudio）。请先在 Codex 中迁移该旧配置；本次未覆盖这些表。",
-    );
-  }
-  const applied = patchProviderProjection(snapshot, target);
-  return {
-    ...applied,
-    warnings,
-    ...(catalog ? { catalog } : {}),
-  };
-}
-
-/** Shared by real switches and the read-only editor view, as in upstream's
- * codex_editor::view / CodexProjection. Opening an editor never writes files. */
-function patchProviderProjection(snapshot: Snapshot, target: Projection) {
-  const source = snapshot.config ?? "";
-  const summary = { doc: parseConfig(source) };
-  const changedFields: string[] = [];
-  const paths: string[][] = [];
-  let output = source;
-  const patch = (path: string[], value: any) => {
-    const previous = getPath(parseConfig(output), path);
-    if (canonical(previous) !== canonical(value))
-      changedFields.push(path.join("."));
-    paths.push(path);
-    output = patchPath(output, path, value);
-  };
-  for (const key of ROUTE_KEYS)
-    patch(
-      [key],
-      key === "model_provider" && !target.official ? "custom" : undefined,
-    );
-  for (const key of FLOOR) patch([key], target.top[key]);
-  patch(["model_providers", "custom"], target.route ?? undefined);
-  // Removed upstream in Codex 0.167; it is a retired routing field, not a user
-  // setting. Leaving it makes the current Codex report an unrecognized setting.
-  if (Object.hasOwn(summary.doc, "disable_response_storage"))
-    patch(["disable_response_storage"], undefined);
-  const ownership: Ownership = { written: {}, prior: {} };
-  const old = snapshot.ownership;
-  for (const key of [...EXCLUSIVE, ...NESTED]) {
-    const path = key.split(".");
-    const current = getPath(parseConfig(output), path);
-    if (
-      old?.written &&
-      Object.hasOwn(old.written, key) &&
-      canonical(current) === canonical(old.written[key])
-    ) {
-      patch(path, old.prior?.[key]);
-    }
-    if (Object.hasOwn(target.extra, key)) {
-      const prior = getPath(parseConfig(output), path);
-      if (prior !== undefined) ownership.prior[key] = prior;
-      ownership.written[key] = target.extra[key];
-      patch(path, target.extra[key]);
-    }
-  }
-  assertOnlyOwnedChanges(source, output, paths);
-  return {
-    config: output,
-    ownership,
-    changedFields: [...new Set(changedFields)],
-  };
-}
-
-/** Adapted from services/provider/codex_editor.rs::view (MIT, Jason Young).
- * Project the row over the current file, not over a fabricated mobile template.
- * Incomplete drafts can be displayed; strict validation stays in planApply. */
-export function providerEditorView(
-  snapshot: Snapshot,
-  provider: Provider,
-): Provider {
-  const current = parseConfig(snapshot.config ?? "");
-  const target = projection(
-    provider,
-    authStatus(snapshot.auth, current),
-    false,
-  );
-  if (target.route) {
-    if (!target.route.base_url) delete target.route.base_url;
-    // The provider's Key already has its own input. Never copy a live route Key
-    // into a new provider, and keep empty/pending credentials out of the TOML.
-    const rowKey = string(provider.settingsConfig.auth.OPENAI_API_KEY);
-    const token = string(target.route.experimental_bearer_token);
-    if (!token || (rowKey && token === rowKey))
-      delete target.route.experimental_bearer_token;
-  }
-  return {
-    ...provider,
-    settingsConfig: {
-      ...provider.settingsConfig,
-      config: patchProviderProjection(snapshot, target).config,
-    },
-  };
-}
-
-/** Same comparison granularity as upstream codex_editor::entries: root
- * values, each child of a global table, and nonselected provider tables. */
-function editorGlobalPaths(
-  docs: TomlObject[],
-  routes: Set<string>,
-): string[][] {
-  const paths = new Map<string, string[]>();
-  for (const doc of docs) {
-    for (const [key, value] of Object.entries(doc)) {
-      if (
-        [
-          ...FLOOR,
-          ...EXCLUSIVE,
-          ...ROUTE_KEYS,
-          "disable_response_storage",
-        ].includes(key)
-      )
-        continue;
-      if (object(value)) {
-        for (const child of Object.keys(value)) {
-          if (key === "model_providers" && routes.has(child)) continue;
-          if (NESTED.includes(key + "." + child)) continue;
-          const path = [key, child];
-          paths.set(JSON.stringify(path), path);
-        }
-      } else paths.set(JSON.stringify([key]), [key]);
-    }
-  }
-  const all = [...paths.values()];
-  return all.filter(
-    (path) =>
-      !all.some(
-        (parent) =>
-          parent.length < path.length &&
-          parent.every((part, i) => part === path[i]),
-      ),
-  );
-}
-
-function editorRoutes(...docs: TomlObject[]) {
-  return new Set(["custom", ...docs.map((doc) => string(doc.model_provider))]);
-}
-
-/** Keep global settings out of new provider rows. Global edits are saved through
- * the version-checked SAF transaction, matching upstream's editor save split. */
-export function providerConfigFromEditor(
-  provider: Provider,
-  base: string,
-  edited: string,
-): string {
-  const stored = parseConfig(provider.settingsConfig.config);
-  const before = parseConfig(base);
-  const after = parseConfig(edited);
-  let output = edited;
-  for (const path of editorGlobalPaths(
-    [stored, before, after],
-    editorRoutes(stored, before, after),
-  ))
-    output = patchPath(output, path, getPath(stored, path));
-  // Optional values inherited unchanged from live are global, not row-owned.
-  for (const key of [...EXCLUSIVE, ...NESTED]) {
-    const path = key.split(".");
-    if (
-      getPath(stored, path) === undefined &&
-      canonical(getPath(before, path)) === canonical(getPath(after, path))
-    )
-      output = patchPath(output, path, undefined);
-  }
-  const prune = (doc: TomlObject, path: string[] = []) => {
-    for (const [key, value] of Object.entries(doc)) {
-      const next = [...path, key];
-      if (!object(value)) continue;
-      prune(value, next);
-      if (
-        !Object.keys(getPath(parseConfig(output), next) ?? {}).length &&
-        getPath(stored, next) === undefined
-      )
-        output = patchPath(output, next, undefined);
-    }
-  };
-  prune(parseConfig(output));
-  return output;
-}
-
-/** Adapted from upstream editor_toml::TomlEdits: only user-edited global keys
- * are merged; an independently changed value is refused without exposing it. */
-export function planProviderEditorGlobals(
-  provider: Provider,
-  base: string,
-  edited: string,
-  current: string,
-): { config: string; changedFields: string[] } {
-  const stored = parseConfig(provider.settingsConfig.config);
-  const before = parseConfig(base);
-  const after = parseConfig(edited);
-  const live = parseConfig(current);
-  const paths = editorGlobalPaths(
-    [before, after],
-    editorRoutes(stored, before, after),
-  );
-  // Deleting a live-only compatibility value is a deliberate global edit.
-  for (const key of EXCLUSIVE) {
-    if (
-      !Object.hasOwn(stored, key) &&
-      Object.hasOwn(before, key) &&
-      !Object.hasOwn(after, key)
-    )
-      paths.push([key]);
-  }
-  let output = current;
-  const changedFields: string[] = [];
-  for (const path of paths) {
-    const oldValue = getPath(before, path);
-    const newValue = getPath(after, path);
-    if (canonical(oldValue) === canonical(newValue)) continue;
-    const liveValue = getPath(live, path);
-    if (
-      canonical(liveValue) !== canonical(oldValue) &&
-      canonical(liveValue) !== canonical(newValue)
-    )
-      bad(
-        "editor_conflict",
-        "编辑期间 Codex 已修改 " +
-          path.join(".") +
-          "。请取消并重新打开，核对后再保存；没有覆盖外部修改。",
-      );
-    if (canonical(liveValue) !== canonical(newValue)) {
-      output = patchPath(output, path, newValue);
-      changedFields.push(path.join("."));
-    }
-  }
-  assertOnlyOwnedChanges(current, output, paths);
-  return { config: output, changedFields };
 }
 
 export function matchProvider(
@@ -818,6 +420,10 @@ export function matchProvider(
     if (expected.official) {
       matchesRoute =
         summary.providerId === "openai" && !summary.baseUrl && !currentTable;
+    } else if (expected.routeKind === "builtin") {
+      matchesRoute = summary.providerId === expected.builtInId;
+    } else if (expected.routeKind === "default") {
+      matchesRoute = summary.providerId === "openai" && !summary.baseUrl;
     } else {
       matchesRoute =
         summary.providerId !== "openai" &&
@@ -826,7 +432,7 @@ export function matchProvider(
     if (provider.historyFilter && !managed) matchesRoute = false;
     if (!provider.historyFilter && managed) matchesRoute = false;
     const managedCatalog = modelCatalog(provider);
-    if (managedCatalog) expected.extra.model_catalog_json = managedCatalog.name;
+    if (managedCatalog && expected.top.model_catalog_json === undefined) expected.top.model_catalog_json = managedCatalog.name;
     const fields = { ...expected.top, ...expected.extra };
     const matchesFields =
       FLOOR.every(
@@ -935,7 +541,7 @@ export function captureCurrent(snapshot: Snapshot, name: string): Provider {
   provider.meta = filteredRoute?.isFullUrl ? { isFullUrl: true } : {};
   provider.settingsConfig = {
     config: stringify(template),
-    auth: key ? { OPENAI_API_KEY: key } : {},
+    auth: official ? structuredClone(summary.auth.auth) : key ? { OPENAI_API_KEY: key } : {},
   };
   return validateProvider(provider);
 }
@@ -1151,6 +757,7 @@ export function exportProviders(
     // Arbitrary overrides may carry credentials under innocent names.
     delete safeMeta.localProxyRequestOverrides;
     delete safeMeta.customEndpoints;
+    delete safeMeta.custom_endpoints;
     return {
       ...p,
       meta: clean(safeMeta),

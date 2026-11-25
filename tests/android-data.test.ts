@@ -6,7 +6,7 @@ import {
   sessionMeta,
 } from "../src/android/sessionData.ts";
 import { modelCatalog } from "../src/core/modelCatalog.ts";
-import { newProvider, planApply, validateProvider } from "../src/core/codex.ts";
+import { newProvider, validateProvider } from "../src/core/codex.ts";
 const event = (type: string, payload: any) => ({
   type,
   payload,

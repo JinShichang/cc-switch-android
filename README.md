@@ -20,7 +20,7 @@
 
 [**codex-desktop-android**](https://github.com/JinShichang/codex-desktop-android) 的**专属配套工具**，用于在手机上管理、切换 Codex 服务商与配置。
 
-基于 CC Switch 移植，保留原版界面与操作逻辑，适配手机横竖屏。独立 Android APK，支持 Android 11 及以上的 ARM64 设备；提供供应商、模型、MCP、Skills、提示词、会话及用量统计管理。
+基于 [CC Switch 4.0.40](https://github.com/farion1231/cc-switch) 的独立 Android APK，复用原版界面与 Rust 配置、认证、切换、路由、聚合和用量逻辑。支持 Android 11+ / ARM64。默认简体中文、100% 缩放，适配触控和用户手动横屏。
 
 ## 使用
 

@@ -9,3 +9,8 @@
 *.gradle text eol=lf
 *.ps1 text eol=crlf
 *.svg text eol=lf
+*.rs text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf

@@ -5,4 +5,5 @@ export interface Prompt {
   content: string;
   description?: string;
   updatedAt: number;
+  enabled?: boolean;
 }

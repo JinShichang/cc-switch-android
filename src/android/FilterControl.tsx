@@ -1,26 +1,11 @@
 import { useEffect, useState } from "react";
 import { invoke, isNative } from "../bridge";
-import type { Provider } from "../core/types";
-import {
-  filterRouteSettings,
-  withLocalFilterRoute,
-} from "../core/filterRoute.ts";
-export async function prepareFilteredProvider(
-  provider: Provider,
-): Promise<Provider> {
-  if (!provider.historyFilter) return provider;
-  const prepared = await invoke<{ baseUrl: string; token: string }>(
-    "prepareFilter",
-    filterRouteSettings(provider),
-  );
-  return withLocalFilterRoute(provider, prepared);
-}
 export function FilterStatusPanel() {
   const [status, setStatus] = useState<any>(null),
     [error, setError] = useState("");
   const refresh = () => {
     if (isNative)
-      invoke("filterStatus")
+      invoke("native",{command:"get_proxy_status",payload:{}})
         .then(setStatus)
         .catch((e) => setError(e.message));
   };
@@ -39,9 +24,7 @@ export function FilterStatusPanel() {
       </p>
       {status?.running && (
         <p>
-          已过滤 {status.filteredRequests} 次 · 推理项{" "}
-          {status.removedReasoningItems} · ID {status.removedItemIds} · 拦截{" "}
-          {status.blockedRequests}
+          路由请求 {status.total_requests} 次 · 成功 {status.success_requests} · 失败 {status.failed_requests}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
@@ -49,7 +32,7 @@ export function FilterStatusPanel() {
           className="button"
           disabled={!isNative}
           onClick={() =>
-            invoke("startFilter")
+            invoke("startRouter")
               .then(refresh)
               .catch((e) => setError(e.message))
           }
@@ -66,32 +49,8 @@ export function FilterStatusPanel() {
           后台运行设置
         </button>
       </div>
-      {!status?.running && (
-        <details>
-          <summary className="text-caption text-fg-2">历史中转路由</summary>
-          <p className="text-caption text-fg-2">
-            清理会使旧备份中的本机中转地址失效，恢复旧备份后需要重新应用供应商方案。
-          </p>
-          <button
-            className="button"
-            disabled={!isNative}
-            onClick={() => {
-              if (
-                window.confirm(
-                  "清理历史中转路由？旧备份中的中转地址将失效；重新应用保存的供应商可生成新路由。",
-                )
-              )
-                invoke("clearFilterRoutes")
-                  .then(() => setError("历史路由已清理"))
-                  .catch((e) => setError(e.message));
-            }}
-          >
-            清理历史路由
-          </button>
-        </details>
-      )}
       <p className="text-caption text-fg-2">
-        关闭过滤：编辑当前供应商关闭开关，再应用直连方案。运行状态不代表 Codex
+        过滤与路由、聚合使用同一个上游中转服务。关闭过滤：编辑供应商关闭开关。运行状态不代表 Codex
         已重新加载配置。被强制停止或重启手机后，请先打开 CC Switch 恢复中转。
       </p>
       {error && <p role="alert">{error}</p>}

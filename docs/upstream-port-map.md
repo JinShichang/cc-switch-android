@@ -1,23 +1,25 @@
-# 上游代码与 Android 适配边界
+# 上游复用
 
-上游 CC Switch 4.0.33，提交 fc3eb797c72e054d554eea6a2e7a8b93933c6ac5，MIT（Jason Young）。本地参考源码为 C:/AI-Projects/codex-android/references/cc-switch。
+基线：CC Switch 4.0.40，aaf6ee963927ea0173e53ac00c1919840948ab22，MIT / Jason Young。
 
-| 能力 | 使用的上游代码 | Android 改动 |
-| --- | --- | --- |
-| 自定义供应商 | src/components/providers/forms/CodexFormFields.tsx、CodexConfigSections.tsx、BasicFormFields.tsx、useCodexConfigState.ts | src/vendor 保留完整控件与行为；仅手机标签、换行和排列，去掉云预设 |
-| 编辑器完整配置与保存 | services/provider/codex_editor.rs、editor_toml.rs、forms/hooks/useDraftEditorProjection.ts | 复用现有字段投影生成完整 live 视图，三方比较只提交修改的全局设置；SAF 版本检查/备份/读回取代文件路径接口 |
-| 首次初始化 | lib.rs、services/provider/live.rs、database/dao/providers_seed.rs | 首次成功读取 SAF 后：空库导入完整 default，再添加 OpenAI Official；初始化标记加密持久化，删除不复活 |
-| config.toml 编辑 | src/components/JsonEditor.tsx | 保留 CodeMirror、差异同步和光标映射；真实 TOML 高亮/校验、触控滚动、字体/行号区 |
-| 会话 | SessionManagerPage、reader 与相关组件 | 原页面、菜单和阅读器；SAF 供给会话内容，宿主动作显式提示尚不可用 |
-| 用量界面 | UsageDashboard、UsageHero、UsageTrendChart、UsageHeatmap、请求/供应商/模型表格 | 原页面与筛选；扫描后刷新查询，未知成功率显示 — |
-| 用量纯逻辑 | src-tauri/src/services/session_usage_codex.rs | 移植至 src/upstream/codexUsage.ts：原生 usage/last 配对、来源快照去重、累计高水位、续写识别、父历史重放、模型名归一化 |
-| 压缩与流读取 | src-tauri/src/codex_rollout_file.rs、session_usage_codex.rs | SessionLogReader.java 从 ContentResolver 文档流读取，支持 .jsonl.zst、普通/压缩同名去重、完整末行和未完成尾行；保留明确大小上限 |
-| 配置切换 | services/provider/codex_direct.rs、live/project/codex.rs | src/core/codex.ts 移植投影规则，TreeAccess/TransactionEngine 处理 SAF 版本比较、写后核验与恢复 |
-| 认证 | codex_direct.rs 的 requires_openai_auth/认证投影规则 | 按可读认证材料自动兼容，不写 Codex auth.json/keyring；已移除自行增加的登录选项 |
-| 历史过滤 | 用户指定的 agentrouter v2 行为 | Android 前台服务与本机中转；该独立功能由用户明确要求，参考源码无许可证，未分发参考源码 |
+| 模块 | Android 实现 |
+| --- | --- |
+| Codex 供应商、认证、编辑 | native/vendor/services/provider/* 与 codex_config.rs，原版 Rust |
+| TOML 修改、发布、pending、恢复 | native/vendor/live/*、mode/operation.rs 与 state.rs，原版引擎 |
+| 路由、聚合、故障转移、协议和流 | native/vendor/proxy/* 与 mode/*，原版代理 |
+| 故障转移开关、队列和设置保存 | 原版 commands/failover.rs、commands/settings.rs，保留验证、回滚和事件 |
+| MCP 与提示词写入 | 原版 mcp.rs、services/prompt.rs；SAF 负责文档传输 |
+| 会话、内容引用、用量解析 | 原版 session_manager 与 session_usage_codex；输入通过只读 SAF 缓存 |
+| 会话内容检索 | 原版持久 FTS 索引，按授权目录隔离 |
+| 用量脚本、定价、统计 | 原版 QuickJS、SQLite 与 model_pricing |
+| 自定义配置、会话、用量页面 | 上游 React 组件，保留字段，仅手机排列与触控适配 |
+| Android 生命周期和文档权限 | MainActivity、NativeCore、TreeAccess、RouterService、platform.rs |
+| 额外历史过滤 | history_filter.rs，按用户提供的 agentrouter 行为独立实现 |
 
-Tauri 桌面命令使用普通路径、桌面钥匙串、SQLite 和桌面生命周期，不能将 content URI 转成普通路径后照搬。本工程保留上游的页面与独立纯逻辑，在 Android 文档与服务边界适配。并未宣称整个桌面后端已原样运行。
+tools/sync-upstream-core.py 可从指定参考仓库重新生成 native/vendor，共 422 个文件。upstream-manifest.json 记录原始文件 hash 和平台替换。平台差异：Tauri IPC/状态/事件替换为 JNI 与 Tokio；文档 I/O 使用 SAF；设备状态按目录 URI 隔离；模型目录指针使用已约定 guest 路径；只启用 Codex；无法探测其他应用进程时提示用户重启。其他 agent 的依赖模块可能仍被编译，但不提供选项或写入它们的文件。
 
-统计仍是读取授权会话日志后的估算；父物理历史边界无法核验、累计基线缺失、损坏压缩数据或读取上限须明确报告。不会为了显示数字而计入复制的父历史，也不会改写 Codex 会话文件或数据库。旧版仅有 turn_token_usage 的累计记录不能冒充单次响应；需可靠基线。实际 HTTP 状态、精确耗时、钥匙串状态和正在运行的配置状态不由 SAF 提供。
+生产配置、认证、MCP 和提示词写入走原版 Rust 引擎；旧 Java 过滤代理已删除。部分旧版 TypeScript 配置辅助函数和 Java 单文件事务辅助函数仍保留用于兼容和测试，生产切换不调用这些写入计划。Android 模式面板复用原版内部组件，并适配手机布局。
 
-0.3.2 统一遵循用户要求：能沿用桌面逻辑的直接沿用；新增平台行为先讨论。运行中的 Codex 不构成切换前置条件，只有文件冲突/权限/写入失败阻止落盘。不会主动旋转屏幕。首次导入是本地方案保存，不等同恢复备份。
+SAF 无法操作 Codex 宿主钥匙串、启动终端或安全迁移正在使用的 guest SQLite 历史数据库；这些操作没有伪装成成功。会话删除和桌面进程操作也未完成移植，需分别评估现有宿主接口。
+
+共享上游模块中的 Gemini、agy OAuth 客户端常量不随源码分发，改为可选的本地构建环境变量 CCSWITCH_GEMINI_OAUTH_CLIENT_ID / CCSWITCH_GEMINI_OAUTH_CLIENT_SECRET、CCSWITCH_AGY_OAUTH_CLIENT_ID / CCSWITCH_AGY_OAUTH_CLIENT_SECRET；未设置时不执行对应的 token 交换或刷新。Android 不提供这些客户端功能，Codex 的认证、配置及用量逻辑不受影响。

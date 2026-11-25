@@ -72,6 +72,21 @@ final class EncryptedRepository {
         }
         for (String key : new String[] { "prompts", "documentBackups" }) if (!next.has(key)) { next.put(key, new JSONArray()); changed = true; }
         if (!next.has("documentJournals")) { next.put("documentJournals", new JSONObject()); changed = true; }
+        if (!next.has("loginStashes")) { next.put("loginStashes", new JSONObject()); changed = true; }
+        if (next.optInt("schemaVersion", 1) < 5) {
+            JSONArray rows = next.getJSONArray("providers");
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject row = rows.getJSONObject(i);
+                row.remove("loginPolicy");
+                JSONObject meta = row.optJSONObject("meta");
+                if (meta != null) {
+                    meta.remove("androidLoginPolicy");
+                    meta.remove("preserveCodexOfficialAuthOnSwitch");
+                }
+            }
+            next.getJSONObject("settings").remove("preserveCodexOfficialAuthOnSwitch");
+            next.put("schemaVersion", 5); changed = true;
+        }
         if (changed) replace(next);
     }
     JSONObject copy() throws Exception { return new JSONObject(data.toString()); }

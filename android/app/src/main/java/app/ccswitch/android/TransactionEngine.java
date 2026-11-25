@@ -4,9 +4,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
 
-/** Single-document, optimistic transaction. SAF has no general atomic rename or
- * cross-process lock. A durable local journal precedes truncation; uncertain
- * partial writes are never "rolled back" over possible concurrent client edits.
+/** Single-document SAF publication. A durable local journal precedes the
+ * provider write, which returns its own commit result. No content readback is
+ * required after publication, matching upstream's live writer.
  * This class deliberately has no Android dependency so failure paths can be
  * tested on the host using the exact implementation included in the APK.
  */
@@ -52,19 +52,9 @@ public final class TransactionEngine {
         }
         try {
             if (after == null) port.delete(); else port.write(after);
-            if (!Arrays.equals(after, port.read())) {
-                throw new Failure("write_unconfirmed", "写入后的内容与目标不一致。已保留写入前备份；请检查目录后恢复。未确认保存成功。");
-            }
         } catch (Exception failure) {
-            boolean intact = false;
-            try { intact = Arrays.equals(before, port.read()); } catch (Exception ignored) { }
-            if (intact) {
-                journal.finish(false);
-                throw new Failure("write_failed_intact", "写入失败，已读回确认原文件未改变。请检查目录权限和剩余空间。");
-            }
-            // Even a close() failure with matching bytes remains unconfirmed:
-            // read-back alone cannot guarantee provider-side durability.
-            throw new Failure("write_unconfirmed", "写入未能完成确认，文件可能不完整。已保留加密恢复备份，请使用“恢复”检查并处理。");
+            journal.finish(false);
+            throw new Failure("write_failed", "文档提供方返回写入失败；已保留写入前备份。");
         }
         journal.finish(true);
     }

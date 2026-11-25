@@ -53,14 +53,20 @@ final class DocumentStore {
             }
             @Override public void finish(boolean saved) throws Exception {
                 JSONObject data = repository.copy();
-                if (saved && !Arrays.equals(target, port.read())) throw new AppFailure("conflict", "文档在核验后发生变化，已保留恢复备份。");
                 if (saved || pending == null) data.getJSONObject("documentJournals").remove(key);
                 repository.replace(data);
             }
         };
-        TransactionEngine.apply(port, expectedHash, target, journal);
+        if(!Arrays.equals(current,target)){
+            journal.prepare(current,target);
+            String digest=null;
+            if(current!=null){StringBuilder hex=new StringBuilder();for(byte b:java.security.MessageDigest.getInstance("SHA-256").digest(current)){hex.append(Character.forDigit((b>>>4)&15,16));hex.append(Character.forDigit(b&15,16));}digest=hex.toString();}
+            NativeCore.get(access.context(),null).call("writeDocument",new JSONObject().put("path",relative)
+                .put("expectedDigest",digest==null?JSONObject.NULL:digest).put("text",target==null?JSONObject.NULL:TreeAccess.utf8(target)));
+            journal.finish(true);
+        }
         if (Arrays.equals(current, target) && pending != null) journal.finish(true);
-        JSONObject result = new JSONObject().put("path", relative).put("hash", TransactionEngine.hash(target)).put("fileVerified", true).put("runtimeConfirmed", false);
+        JSONObject result = new JSONObject().put("path", relative).put("hash", TransactionEngine.hash(target)).put("fileSaved", true).put("runtimeConfirmed", false);
         try { result.put("text", target == null ? JSONObject.NULL : TreeAccess.utf8(target)); }
         catch (AppFailure invalidEncoding) { result.put("text", JSONObject.NULL).put("invalidEncoding", true); }
         return result;

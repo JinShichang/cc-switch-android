@@ -98,6 +98,7 @@ import {
   type FetchedModelSelection,
 } from "./FetchedModelPicker";
 import { LocalProxyRequestOverridesField } from "./LocalProxyRequestOverridesField";
+import { BillingMultiplierField } from "./BillingMultiplierField";
 import { cn } from "@/vendor/lib/utils";
 import { useCommittableRef } from "@/vendor/hooks/useLatestRef";
 import { useModelMetadataFill } from "@/vendor/hooks/useModelMetadataFill";
@@ -252,6 +253,8 @@ interface CodexFormFieldsProps {
   // Local proxy User-Agent override
   customUserAgent: string;
   onCustomUserAgentChange: (value: string) => void;
+  billingMultiplier?: string;
+  onBillingMultiplierChange?: (value: string) => void;
   localProxyHeadersOverride: string;
   onLocalProxyHeadersOverrideChange: (value: string) => void;
   localProxyBodyOverride: string;
@@ -713,6 +716,8 @@ export function CodexFormFields({
   speedTestEndpoints,
   customUserAgent,
   onCustomUserAgentChange,
+  billingMultiplier = "",
+  onBillingMultiplierChange,
   localProxyHeadersOverride,
   onLocalProxyHeadersOverrideChange,
   localProxyBodyOverride,
@@ -777,6 +782,7 @@ export function CodexFormFields({
   const hasAnyAdvancedValue =
     isCopilotPreset ||
     !!customUserAgent ||
+    !!billingMultiplier ||
     hasRequestOverrides ||
     isAnthropicFormat ||
     supportsThinking ||
@@ -802,7 +808,7 @@ export function CodexFormFields({
   // Stack 布局的高级区（思考能力、Anthropic 专有项、User-Agent、请求覆盖）：填了 UA 或请求
   // 覆盖才展开，其余多是预设自带的。
   const [stackAdvancedExpanded, setStackAdvancedExpanded] = useState(
-    isFullUrl || !!customUserAgent || hasRequestOverrides,
+    isFullUrl || !!customUserAgent || !!billingMultiplier || hasRequestOverrides,
   );
 
   // 显示用的顺序。挪动默认那一行不算修改：没动过列表时保存仍是原来的顺序。
@@ -1719,12 +1725,15 @@ export function CodexFormFields({
       <p className="text-xs leading-relaxed text-fg-2">
         {isGrokBuild
           ? t("grokBuild.routeOnlySettingsHint", {
-              defaultValue: "以下两项只在路由模式下生效。",
+              defaultValue: "以下设置只在路由模式下生效。",
             })
           : t("codexConfig.routeOnlySettingsHint", {
-              defaultValue: "以下两项只在路由、聚合模式下生效。",
+              defaultValue: "以下设置只在路由、聚合模式下生效。",
             })}
       </p>
+      {onBillingMultiplierChange && (
+        <BillingMultiplierField id="codex-billing-multiplier" value={billingMultiplier} onChange={onBillingMultiplierChange} />
+      )}
       <CustomUserAgentField
         id="codex-custom-user-agent"
         value={customUserAgent}

@@ -1,4 +1,9 @@
 /* Android layout additions. Colors, typography and controls come from upstream index.css. */
+.mobile-mode-control>div:first-child{flex-wrap:wrap;padding:8px 12px;gap:8px}
+.mobile-mode-control [role=group]{max-width:100%;height:auto}
+.mobile-mode-control [role=group]>button{min-width:72px;padding-left:8px;padding-right:8px}
+.mode-entry{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px}
+.mode-entry p{flex:1;min-width:180px;margin:0;color:var(--text-2)}
 html,
 body,
 #root {

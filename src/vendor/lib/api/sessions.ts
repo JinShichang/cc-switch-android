@@ -50,8 +50,12 @@ export const sessionsApi = {
   async searchContent(
     query: string,
     providerIds?: string[],
+    signal?: AbortSignal,
   ): Promise<SessionContentSearchResult> {
-    return await invoke("search_session_content", { query, providerIds });
+    if(signal?.aborted)throw new DOMException('搜索已取消','AbortError');
+    const result=await invoke<SessionContentSearchResult>("search_session_content", { query, providerIds });
+    if(signal?.aborted)throw new DOMException('搜索已取消','AbortError');
+    return result;
   },
 
   /** 删除正文索引文件（关闭「搜索消息正文」时） */

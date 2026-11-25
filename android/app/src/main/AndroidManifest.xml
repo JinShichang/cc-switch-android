@@ -23,8 +23,8 @@
         android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <service android:name=".FilterService" android:exported="false" android:foregroundServiceType="specialUse">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled continuous loopback HTTP relay that filters Codex Responses request history and streams provider replies while Codex is in use." />
+        <service android:name=".RouterService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled local CC Switch Codex routing and model aggregation server with streaming replies and optional history filtering." />
         </service>
         <activity
             android:name=".MainActivity"

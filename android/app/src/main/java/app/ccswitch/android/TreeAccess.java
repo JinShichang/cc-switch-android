@@ -61,6 +61,7 @@ final class TreeAccess implements TransactionEngine.Port {
         for (String part : relative.split("/", -1)) if (part.isEmpty() || part.equals(".") || part.equals("..") || part.indexOf('\0') >= 0) throw new AppFailure("invalid_path", "文档路径必须位于已授权目录内。");
     }
     private Uri root() { return DocumentsContract.buildDocumentUriUsingTree(tree, rootId); }
+    Context context(){return context;}
     private Uri findChild(Uri parent, String name, boolean directory, boolean writable) throws Exception {
         Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getDocumentId(parent));
         Uri found = null;
@@ -131,7 +132,7 @@ final class TreeAccess implements TransactionEngine.Port {
         String name = relative.substring(slash + 1);
         Uri target = findChild(parent, name, false, true);
         if (target == null) {
-            target = DocumentsContract.createDocument(resolver, parent, relative.endsWith(".toml") ? "application/toml" : "text/plain", name);
+            target = DocumentsContract.createDocument(resolver, parent, relative.endsWith(".toml") ? "application/toml" : relative.endsWith(".json") ? "application/json" : "text/plain", name);
             Uri checked = findChild(parent, name, false, true);
             if (target == null || checked == null || !DocumentsContract.getDocumentId(target).equals(DocumentsContract.getDocumentId(checked))) throw new AppFailure("create_renamed", "文档提供方改变了文件名称，未确认写入成功。");
         }
@@ -141,6 +142,31 @@ final class TreeAccess implements TransactionEngine.Port {
         Uri target = locate(relative, false, false);
         if (target != null && !DocumentsContract.deleteDocument(resolver, target)) throw new AppFailure("delete_failed", "提供方未允许删除文档。");
     }
+    void checkConfigWrite(String relative, boolean deleting) throws Exception {
+        if (!relative.equals("config.toml") && !relative.equals("auth.json")) throw new AppFailure("write_scope", "仅允许修改 Codex 配置和认证文件。");
+        Uri target = locate(relative, false, false);
+        if (target == null) {
+            if (deleting) return;
+            if (!info().optBoolean("canWrite")) throw new AppFailure("read_only", "授权目录不允许创建配置文件。");
+            return;
+        }
+        try (Cursor cursor = resolver.query(target, new String[] { DocumentsContract.Document.COLUMN_FLAGS }, null, null, null)) {
+            if (cursor == null || !cursor.moveToFirst()) throw new AppFailure("directory_unavailable", "配置文档暂时不可用。");
+            int flag = deleting ? DocumentsContract.Document.FLAG_SUPPORTS_DELETE : DocumentsContract.Document.FLAG_SUPPORTS_WRITE;
+            if ((cursor.getInt(0) & flag) == 0) throw new AppFailure("read_only", "文档提供方不允许修改或删除 " + relative + "，未写入配置。");
+        }
+    }
+    void writeAuth(byte[] bytes) throws Exception { writeFile("auth.json", bytes); }
+    void deleteAuth() throws Exception { deleteFile("auth.json"); }
+    private static void checkNativePath(String relative) throws AppFailure {
+        validPath(relative);
+        if (!relative.equals("config.toml") && !relative.equals("auth.json") &&
+                !relative.equals("cc-switch-model-catalog.json") && !relative.equals("AGENTS.md") &&
+                !relative.matches("skills/[A-Za-z0-9_-]{1,80}/SKILL\\.md"))
+            throw new AppFailure("write_scope", "上游写入目标不在支持的 Codex 配置文档范围内。");
+    }
+    void writeNativeFile(String relative, byte[] bytes) throws Exception { checkNativePath(relative); writeFile(relative,bytes); }
+    void deleteNativeFile(String relative) throws Exception { checkNativePath(relative); deleteFile(relative); }
     TransactionEngine.Port port(String relative) throws Exception {
         validPath(relative);
         if (!relative.matches("cc-switch-model-catalog-[a-f0-9]{1,16}\\.json") && !relative.equals("AGENTS.md") && !relative.matches("skills/[A-Za-z0-9_-]{1,80}/SKILL\\.md")) throw new AppFailure("write_scope", "本版本仅修改 config.toml、AGENTS.md 和用户技能 SKILL.md。");
@@ -173,6 +199,15 @@ final class TreeAccess implements TransactionEngine.Port {
             if (stream == null) throw new AppFailure("write_failed", "DocumentsProvider 无法打开写入流。");
             stream.write(bytes);
             stream.flush();
+        }
+        // Codex's existing provider commits on its close handler. An exact
+        // document query waits for that commit and propagates its error. This
+        // is a transport completion barrier, not a file-content readback.
+        try (Cursor cursor = resolver.query(uri,
+                new String[] { DocumentsContract.Document.COLUMN_DOCUMENT_ID },
+                null, null, null)) {
+            if (cursor == null || !cursor.moveToFirst())
+                throw new AppFailure("write_failed", "文档提供方未返回文件提交结果。");
         }
     }
     static String utf8(byte[] bytes) throws Exception {

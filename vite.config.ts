@@ -12,6 +12,9 @@ export default defineConfig({
     },
   },
   base: "./",
+  server: {
+    watch: { ignored: ["**/android/**", "**/native/**", "**/.local/**"] },
+  },
   build: {
     target: "es2022",
     outDir: "android/app/src/main/assets/web",

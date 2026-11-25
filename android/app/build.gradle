@@ -9,8 +9,8 @@ android {
         ndk { abiFilters 'arm64-v8a' }
         minSdk 30
         targetSdk 37
-        versionCode 5
-        versionName '0.3.2'
+        versionCode 6
+        versionName '0.4.0'
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
@@ -32,7 +32,8 @@ android {
             if (System.getenv('CCSWITCH_SIGNING_KEYSTORE')) signingConfig signingConfigs.local
         }
     }
-    // zstd-jni provides the ARM64 Android decoder; the UI and SAF bridge run in ART/WebView.
+    packaging { jniLibs { useLegacyPackaging false } }
+    // ARM64 Rust core is built with tools/build-core.sh; 16 KB ELF alignment.
 }
 
 dependencies {
@@ -48,6 +49,9 @@ tasks.register('checkWebAssets') {
     doLast {
         if (!file('src/main/assets/web/index.html').isFile()) {
             throw new GradleException('Missing frontend assets. Run npm ci and npm run build in the repository root first.')
+        }
+        if (!file('src/main/jniLibs/arm64-v8a/libcc_switch_android_core.so').isFile()) {
+            throw new GradleException('Missing upstream native core. Run tools/build-core.sh with the Android NDK first.')
         }
     }
 }

@@ -1,0 +1,47 @@
+{
+  "alloc-stdlib": {
+    "file": "alloc-stdlib-0.2.4.txt",
+    "source": "https://raw.githubusercontent.com/dropbox/rust-alloc-no-stdlib/ae42d22078b98549e987d2f03d12df7b984fde47/LICENSE",
+    "license": "BSD-3-Clause"
+  },
+  "cesu8": {
+    "file": "cesu8-1.1.0.txt",
+    "source": "https://github.com/emk/cesu8-rs/blob/master/src/lib.rs",
+    "license": "Apache-2.0"
+  },
+  "crc-catalog": {
+    "file": "crc-catalog-2.5.0.txt",
+    "source": "https://codeload.github.com/akhilles/crc-catalog/zip/ed4ad631f22b05055c21a3a4127eb7cf6d75bb62",
+    "license": "Apache-2.0"
+  },
+  "jni-sys-macros": {
+    "file": "jni-sys-macros-0.4.1.txt",
+    "source": "https://raw.githubusercontent.com/jni-rs/jni-sys/64d77b7a5f119d7b55b4e2c169a4668067ff59e6/LICENSE-MIT",
+    "license": "MIT"
+  },
+  "relative-path": {
+    "file": "relative-path-1.9.3.txt",
+    "source": "https://raw.githubusercontent.com/udoprog/relative-path/6d267fbd85b257e4416c9f020131c6da168e1d3d/LICENSE-MIT",
+    "license": "MIT"
+  },
+  "rmcp": {
+    "file": "rmcp-0.8.5.txt",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/rust-sdk/941300acbe368a0edd9bb4921fb885b4c0763342/LICENSE",
+    "license": "MIT"
+  },
+  "rquickjs-core": {
+    "file": "rquickjs-core-0.8.1.txt",
+    "source": "https://raw.githubusercontent.com/DelSkayn/rquickjs/ec52f5c087b7f95842e05469c1b95b1ae86ee5c6/LICENSE",
+    "license": "MIT"
+  },
+  "rmcp-macros": {
+    "file": "rmcp-0.8.5.txt",
+    "source": "https://raw.githubusercontent.com/modelcontextprotocol/rust-sdk/941300acbe368a0edd9bb4921fb885b4c0763342/LICENSE",
+    "license": "MIT"
+  },
+  "rquickjs-macro": {
+    "file": "rquickjs-core-0.8.1.txt",
+    "source": "https://raw.githubusercontent.com/DelSkayn/rquickjs/ec52f5c087b7f95842e05469c1b95b1ae86ee5c6/LICENSE",
+    "license": "MIT"
+  }
+}
